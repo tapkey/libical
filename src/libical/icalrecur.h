@@ -110,12 +110,6 @@ typedef enum icalrecurrencetype_skip
     ICAL_SKIP_UNDEFINED
 } icalrecurrencetype_skip;
 
-enum icalrecurrence_array_max_values
-{
-    ICAL_RECURRENCE_ARRAY_MAX = 0x7f7f,
-    ICAL_RECURRENCE_ARRAY_MAX_BYTE = 0x7f
-};
-
 /*
  * Recurrence enumerations conversion routines.
  */
@@ -148,6 +142,18 @@ LIBICAL_ICAL_EXPORT icalrecurrencetype_weekday icalrecur_string_to_weekday(const
 #define ICAL_BY_SETPOS_SIZE     ICAL_BY_YEARDAY_SIZE          /* 1 to N */
 #define ICAL_BY_DAY_SIZE        7*(ICAL_BY_WEEKNO_SIZE-1)+1   /* 1 to N */
 
+struct icalrecurrencetype_storage {
+	short by_second[ICAL_BY_SECOND_SIZE];
+	short by_minute[ICAL_BY_MINUTE_SIZE];
+	short by_hour[ICAL_BY_HOUR_SIZE];
+	short by_day[ICAL_BY_DAY_SIZE];     /* Encoded value, see below */
+	short by_month_day[ICAL_BY_MONTHDAY_SIZE];
+	short by_year_day[ICAL_BY_YEARDAY_SIZE];
+	short by_week_no[ICAL_BY_WEEKNO_SIZE];
+	short by_month[ICAL_BY_MONTH_SIZE];
+	short by_set_pos[ICAL_BY_SETPOS_SIZE];
+};
+
 /** Main struct for holding digested recurrence rules */
 struct icalrecurrencetype
 {
@@ -170,20 +176,32 @@ struct icalrecurrencetype
      * ICAL_RECURRENCE_ARRAY_MAX unless the list is full.
      */
 
-    short by_second[ICAL_BY_SECOND_SIZE];
-    short by_minute[ICAL_BY_MINUTE_SIZE];
-    short by_hour[ICAL_BY_HOUR_SIZE];
-    short by_day[ICAL_BY_DAY_SIZE];     /* Encoded value, see below */
-    short by_month_day[ICAL_BY_MONTHDAY_SIZE];
-    short by_year_day[ICAL_BY_YEARDAY_SIZE];
-    short by_week_no[ICAL_BY_WEEKNO_SIZE];
-    short by_month[ICAL_BY_MONTH_SIZE];
-    short by_set_pos[ICAL_BY_SETPOS_SIZE];
+	short* by_second;
+	short* by_minute;
+	short* by_hour;
+	short* by_day;     /* Encoded value, see below */
+	short* by_month_day;
+	short* by_year_day;
+	short* by_week_no;
+	short* by_month;
+	short* by_set_pos;
+	short by_second_size;
+	short by_minute_size;
+	short by_hour_size;
+	short by_day_size;
+	short by_month_day_size;
+	short by_year_day_size;
+	short by_week_no_size;
+	short by_month_size;
+	short by_set_pos_size;
 
     /* For RSCALE extension (RFC 7529) */
     char *rscale;
     icalrecurrencetype_skip skip;
+
+	struct icalrecurrencetype_storage* storage;
 };
+
 
 LIBICAL_ICAL_EXPORT int icalrecurrencetype_rscale_is_supported(void);
 
@@ -191,6 +209,9 @@ LIBICAL_ICAL_EXPORT icalarray *icalrecurrencetype_rscale_supported_calendars(voi
 
 LIBICAL_ICAL_EXPORT void icalrecurrencetype_clear(struct icalrecurrencetype *r);
 
+LIBICAL_ICAL_EXPORT struct icalrecurrencetype* icalrecurrencetype_clone(struct icalrecurrencetype* r);
+
+LIBICAL_ICAL_EXPORT void icalrecurrencetype_free(struct icalrecurrencetype* r);
 /**
  * Array Encoding
  *
@@ -219,7 +240,7 @@ LIBICAL_ICAL_EXPORT int icalrecurrencetype_month_month(short month);
 /** Recurrance rule parser */
 
 /** Convert between strings and recurrencetype structures. */
-LIBICAL_ICAL_EXPORT struct icalrecurrencetype icalrecurrencetype_from_string(const char *str);
+LIBICAL_ICAL_EXPORT struct icalrecurrencetype* icalrecurrencetype_from_string(const char *str);
 
 LIBICAL_ICAL_EXPORT char *icalrecurrencetype_as_string(struct icalrecurrencetype *recur);
 

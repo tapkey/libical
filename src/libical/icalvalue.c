@@ -626,14 +626,18 @@ static icalvalue *icalvalue_new_from_string_with_error(icalvalue_kind kind,
 
     case ICAL_RECUR_VALUE:
         {
-            struct icalrecurrencetype rt;
+            struct icalrecurrencetype* rt;
 
             rt = icalrecurrencetype_from_string(str);
-            if (rt.freq != ICAL_NO_RECURRENCE) {
-                value = icalvalue_new_recur(rt);
-            }
-            icalmemory_free_buffer(rt.rscale);
-            break;
+			if (rt == 0)
+				break;
+
+            if (rt->freq != ICAL_NO_RECURRENCE) {
+                value = icalvalue_new_recur(*rt);
+			}
+			icalrecurrencetype_free(rt);
+
+			break;
         }
 
     case ICAL_DATE_VALUE:
@@ -801,8 +805,7 @@ void icalvalue_free(icalvalue *v)
     case ICAL_RECUR_VALUE:
         {
             if (v->data.v_recur != 0) {
-                icalmemory_free_buffer(v->data.v_recur->rscale);
-                icalmemory_free_buffer((void *)v->data.v_recur);
+				icalrecurrencetype_free(v->data.v_recur);
                 v->data.v_recur = 0;
             }
             break;

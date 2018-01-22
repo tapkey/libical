@@ -170,19 +170,24 @@
 #endif
 
 #define BYDAYIDX impl->by_indices[BY_DAY]
-#define BYDAYPTR impl->by_ptrs[BY_DAY]
+#define BYDAYPTR (*impl->by_ptrs[BY_DAY])
+#define BYDAYSIZE (*impl->by_ptr_sizes[BY_DAY])
 
 #define BYMONIDX impl->by_indices[BY_MONTH]
-#define BYMONPTR impl->by_ptrs[BY_MONTH]
+#define BYMONPTR (*impl->by_ptrs[BY_MONTH])
+#define BYMONSIZE (*impl->by_ptr_sizes[BY_MONTH])
 
 #define BYMDIDX impl->by_indices[BY_MONTH_DAY]
-#define BYMDPTR impl->by_ptrs[BY_MONTH_DAY]
+#define BYMDPTR (*impl->by_ptrs[BY_MONTH_DAY])
+#define BYMDSIZE (*impl->by_ptr_sizes[BY_MONTH_DAY])
 
 #define BYYDIDX impl->by_indices[BY_YEAR_DAY]
-#define BYYDPTR impl->by_ptrs[BY_YEAR_DAY]
+#define BYYDPTR (*impl->by_ptrs[BY_YEAR_DAY])
+#define BYYDSIZE (*impl->by_ptr_sizes[BY_YEAR_DAY])
 
 #define BYWEEKIDX impl->by_indices[BY_WEEK_NO]
-#define BYWEEKPTR impl->by_ptrs[BY_WEEK_NO]
+#define BYWEEKPTR (*impl->by_ptrs[BY_WEEK_NO])
+#define BYWEEKSIZE (*impl->by_ptr_sizes[BY_WEEK_NO])
 
 #define LEAP_MONTH 0x1000
 
@@ -310,6 +315,13 @@ icalrecurrencetype_weekday icalrecur_string_to_weekday(const char *str)
 
 /*********************** Rule parsing routines ************************/
 
+void icalrecurrencetype_free(struct icalrecurrencetype* rt) {
+
+    icalmemory_free_buffer(rt->rscale);
+    icalmemory_free_buffer(rt->storage);
+    icalmemory_free_buffer(rt);
+}
+
 struct icalrecur_parser
 {
     const char *rule;
@@ -384,19 +396,19 @@ static void icalrecur_clause_name_and_value(struct icalrecur_parser *parser,
     *value = idx;
 }
 
-static int icalrecur_add_byrules(struct icalrecur_parser *parser, short *array,
-                                 int min, int size, char *vals)
+static int icalrecur_add_byrules(struct icalrecur_parser *parser, short *array, short* pSize,
+                                 int min, int maxSize, char *vals)
 {
     char *t, *n;
-    int i = 0;
     int v;
-    int max = size - (min == 0);
+    int max = maxSize - (min == 0);
 
     n = vals;
+	*pSize = 0;
 
     while (n != 0) {
 
-        if (i == size) {
+        if (*pSize == maxSize) {
             return -1;
         }
 
@@ -436,8 +448,7 @@ static int icalrecur_add_byrules(struct icalrecur_parser *parser, short *array,
             }
         }
 
-        array[i++] = (short)v;
-        array[i] = ICAL_RECURRENCE_ARRAY_MAX;
+        array[(*pSize)++] = (short)v;
     }
 
     return 0;
@@ -457,7 +468,7 @@ static void sort_bydayrules(struct icalrecur_parser *parser)
     week_start = parser->rt.week_start;
 
     for (i = 0;
-         i < ICAL_BY_DAY_SIZE && array[i] != ICAL_RECURRENCE_ARRAY_MAX; i++) {
+         i < parser->rt.by_day_size; i++) {
         for (j = 0; j < i; j++) {
             one = icalrecurrencetype_day_day_of_week(array[j]) - week_start;
             if (one < 0) {
@@ -482,12 +493,14 @@ static int icalrecur_add_bydayrules(struct icalrecur_parser *parser,
                                     const char *vals)
 {
     char *t, *n;
-    int i = 0;
     short *array = parser->rt.by_day;
-    char *vals_copy;
+	short* pSize = &parser->rt.by_day_size;
+	char *vals_copy;
 
     vals_copy = icalmemory_strdup(vals);
     n = vals_copy;
+
+	*pSize = 0;
 
     while (n != 0) {
         int sign = 1;
@@ -495,7 +508,7 @@ static int icalrecur_add_bydayrules(struct icalrecur_parser *parser,
                                 so we fit in a signed char to get -1 SU for last Sun */
         icalrecurrencetype_weekday wd;
 
-        if (i == ICAL_BY_DAY_SIZE) {
+        if (*pSize == ICAL_BY_DAY_SIZE) {
             icalmemory_free_buffer(vals_copy);
             return -1;
         }
@@ -531,8 +544,7 @@ static int icalrecur_add_bydayrules(struct icalrecur_parser *parser,
             return -1;
         }
 
-        array[i++] = (short)(sign * (wd + 8 * weekno));
-        array[i] = ICAL_RECURRENCE_ARRAY_MAX;
+        array[(*pSize)++] = (short)(sign * (wd + 8 * weekno));
     }
 
     icalmemory_free_buffer(vals_copy);
@@ -542,14 +554,85 @@ static int icalrecur_add_bydayrules(struct icalrecur_parser *parser,
     return 0;
 }
 
-struct icalrecurrencetype icalrecurrencetype_from_string(const char *str)
+struct icalrecurrencetype* icalrecurrencetype_clone(struct icalrecurrencetype* src) {
+
+	char *rscale = 0;
+	struct icalrecurrencetype_storage* storage = 0;
+	struct icalrecurrencetype* res = 0;
+
+	if (!src)
+		return 0;
+
+	if (src->rscale) {
+		rscale = icalmemory_strdup(src->rscale);
+		if (!rscale)
+			return 0;
+	}
+	if (src->storage) {
+		storage = (struct icalrecurrencetype_storage*) icalmemory_new_buffer(sizeof(struct icalrecurrencetype_storage));
+		if (!storage) {
+			icalmemory_free_buffer(rscale);
+			return 0;
+		}
+		memcpy(storage, src->storage, sizeof(*storage));
+	}
+
+	res = (struct icalrecurrencetype*) icalmemory_new_buffer(sizeof(struct icalrecurrencetype));
+	if (!res) {
+        icalmemory_free_buffer(rscale);
+        icalmemory_free_buffer(storage);
+		return 0;
+	}
+
+	*res = *src;
+
+	res->storage = storage;
+
+	if (storage) {
+		res->by_second = storage->by_second;
+		res->by_minute = storage->by_minute;
+		res->by_hour = storage->by_hour;
+		res->by_day = storage->by_day;
+		res->by_month_day = storage->by_month_day;
+		res->by_year_day = storage->by_year_day;
+		res->by_week_no = storage->by_week_no;
+		res->by_month = storage->by_month;
+		res->by_set_pos = storage->by_set_pos;
+	}
+
+	return res;
+}
+
+struct icalrecurrencetype* icalrecurrencetype_from_string(const char *str)
 {
     struct icalrecur_parser parser;
+
+	struct icalrecurrencetype_storage* pStorage = (struct icalrecurrencetype_storage*) icalmemory_new_buffer(sizeof(struct icalrecurrencetype_storage));
+	if (pStorage == 0)
+		return 0;
 
     memset(&parser, 0, sizeof(parser));
     icalrecurrencetype_clear(&parser.rt);
 
-    icalerror_check_arg_re(str != 0, "str", parser.rt);
+	parser.rt.storage = pStorage;
+
+	parser.rt.by_second = pStorage->by_second;
+	parser.rt.by_minute = pStorage->by_minute;
+	parser.rt.by_hour = pStorage->by_hour;
+	parser.rt.by_day = pStorage->by_day;
+	parser.rt.by_month_day = pStorage->by_month_day;
+	parser.rt.by_year_day = pStorage->by_year_day;
+	parser.rt.by_week_no = pStorage->by_week_no;
+	parser.rt.by_month = pStorage->by_month;
+	parser.rt.by_set_pos = pStorage->by_set_pos;
+
+	if (!(str != 0)) {
+		icalerror_stop_here();
+		assert(0);
+
+        icalmemory_free_buffer(pStorage);
+		return 0;
+	}
 
     /* Set up the parser struct */
     parser.rule = str;
@@ -558,7 +641,8 @@ struct icalrecurrencetype icalrecurrencetype_from_string(const char *str)
 
     if (parser.copy == 0) {
         icalerror_set_errno(ICAL_NEWFAILED_ERROR);
-        return parser.rt;
+        icalmemory_free_buffer(pStorage);
+		return 0;
     }
 
     /* Loop through all of the clauses */
@@ -610,30 +694,30 @@ struct icalrecurrencetype icalrecurrencetype_from_string(const char *str)
                 sort_bydayrules(&parser);
             }
         } else if (strcasecmp(name, "BYSECOND") == 0) {
-            r = icalrecur_add_byrules(&parser, parser.rt.by_second,
+            r = icalrecur_add_byrules(&parser, parser.rt.by_second, &parser.rt.by_second_size,
                                       0, ICAL_BY_SECOND_SIZE, value);
         } else if (strcasecmp(name, "BYMINUTE") == 0) {
-            r = icalrecur_add_byrules(&parser, parser.rt.by_minute,
+            r = icalrecur_add_byrules(&parser, parser.rt.by_minute, &parser.rt.by_minute_size,
                                       0, ICAL_BY_MINUTE_SIZE, value);
         } else if (strcasecmp(name, "BYHOUR") == 0) {
-            r = icalrecur_add_byrules(&parser, parser.rt.by_hour,
+            r = icalrecur_add_byrules(&parser, parser.rt.by_hour, &parser.rt.by_hour_size,
                                       0, ICAL_BY_HOUR_SIZE, value);
         } else if (strcasecmp(name, "BYDAY") == 0) {
-            r = icalrecur_add_bydayrules(&parser, value);
-        } else if (strcasecmp(name, "BYMONTHDAY") == 0) {
-            r = icalrecur_add_byrules(&parser, parser.rt.by_month_day,
+			r = icalrecur_add_bydayrules(&parser, value);
+		} else if (strcasecmp(name, "BYMONTHDAY") == 0) {
+            r = icalrecur_add_byrules(&parser, parser.rt.by_month_day, &parser.rt.by_month_day_size,
                                       -1, ICAL_BY_MONTHDAY_SIZE, value);
         } else if (strcasecmp(name, "BYYEARDAY") == 0) {
-            r = icalrecur_add_byrules(&parser, parser.rt.by_year_day,
+            r = icalrecur_add_byrules(&parser, parser.rt.by_year_day, &parser.rt.by_year_day_size,
                                       -1, ICAL_BY_YEARDAY_SIZE, value);
         } else if (strcasecmp(name, "BYWEEKNO") == 0) {
-            r = icalrecur_add_byrules(&parser, parser.rt.by_week_no,
+            r = icalrecur_add_byrules(&parser, parser.rt.by_week_no, &parser.rt.by_week_no_size,
                                       -1, ICAL_BY_WEEKNO_SIZE, value);
         } else if (strcasecmp(name, "BYMONTH") == 0) {
-            r = icalrecur_add_byrules(&parser, parser.rt.by_month,
+            r = icalrecur_add_byrules(&parser, parser.rt.by_month, &parser.rt.by_month_size,
                                       1, ICAL_BY_MONTH_SIZE, value);
         } else if (strcasecmp(name, "BYSETPOS") == 0) {
-            r = icalrecur_add_byrules(&parser, parser.rt.by_set_pos,
+            r = icalrecur_add_byrules(&parser, parser.rt.by_set_pos, &parser.rt.by_set_pos_size,
                                       -1, ICAL_BY_SETPOS_SIZE, value);
         } else {
             r = -1;
@@ -649,33 +733,41 @@ struct icalrecurrencetype icalrecurrencetype_from_string(const char *str)
 
     icalmemory_free_buffer(parser.copy);
 
-    return parser.rt;
+	struct icalrecurrencetype* res = (struct icalrecurrencetype*) icalmemory_new_buffer(sizeof(struct icalrecurrencetype));
+	if (res == 0) {
+        icalmemory_free_buffer(pStorage);
+		return 0;
+	}
+
+	*res = parser.rt;
+
+    return res;
 }
 
 static struct recur_map
 {
     const char *str;
-    size_t offset;
-    int limit;
+    size_t ptr_offset;
+	size_t size_offset;
 } recur_map[] = {
-    { ";BYSECOND=", offsetof(struct icalrecurrencetype, by_second),
-      ICAL_BY_SECOND_SIZE - 1 },
+    { ";BYSECOND=", offsetof(struct icalrecurrencetype, by_second), 
+	offsetof(struct icalrecurrencetype, by_second_size) },
     { ";BYMINUTE=", offsetof(struct icalrecurrencetype, by_minute),
-      ICAL_BY_MINUTE_SIZE - 1 },
+	offsetof(struct icalrecurrencetype, by_minute_size) },
     { ";BYHOUR=", offsetof(struct icalrecurrencetype, by_hour),
-      ICAL_BY_HOUR_SIZE - 1 },
+	offsetof(struct icalrecurrencetype, by_hour_size) },
     { ";BYDAY=", offsetof(struct icalrecurrencetype, by_day),
-      ICAL_BY_DAY_SIZE - 1 },
+	offsetof(struct icalrecurrencetype, by_day_size) },
     { ";BYMONTHDAY=", offsetof(struct icalrecurrencetype, by_month_day),
-      ICAL_BY_MONTHDAY_SIZE - 1 },
-    { ";BYYEARDAY=", offsetof(struct icalrecurrencetype, by_year_day),
-      ICAL_BY_YEARDAY_SIZE - 1 },
+	offsetof(struct icalrecurrencetype, by_month_day_size) },
+	{ ";BYYEARDAY=", offsetof(struct icalrecurrencetype, by_year_day),
+	offsetof(struct icalrecurrencetype, by_year_day_size) },
     { ";BYWEEKNO=", offsetof(struct icalrecurrencetype, by_week_no),
-      ICAL_BY_WEEKNO_SIZE - 1 },
-    { ";BYMONTH=", offsetof(struct icalrecurrencetype, by_month),
-      ICAL_BY_MONTH_SIZE - 1 },
+	offsetof(struct icalrecurrencetype, by_week_no_size) },
+	{ ";BYMONTH=", offsetof(struct icalrecurrencetype, by_month),
+	offsetof(struct icalrecurrencetype, by_month_size) },
     { ";BYSETPOS=", offsetof(struct icalrecurrencetype, by_set_pos),
-      ICAL_BY_SETPOS_SIZE - 1 },
+	offsetof(struct icalrecurrencetype, by_set_pos_size) },
     { 0, 0, 0 }
 };
 
@@ -739,16 +831,18 @@ char *icalrecurrencetype_as_string_r(struct icalrecurrencetype *recur)
     }
 
     for (j = 0; recur_map[j].str != 0; j++) {
-        short *array = (short *)(recur_map[j].offset + (size_t) recur);
-        int limit = recur_map[j].limit;
+        short **pArray = (short *)(recur_map[j].ptr_offset + (size_t) recur);
+		short *array = *pArray;
+		short *pSize = (short *)(recur_map[j].size_offset + (size_t)recur);
+        int limit = *pSize;
 
         /* Skip unused arrays */
-        if (array[0] != ICAL_RECURRENCE_ARRAY_MAX) {
+        if (limit != 0) {
 
             icalmemory_append_string(&str, &str_p, &buf_sz, recur_map[j].str);
 
             for (i = 0;
-                 i < limit && array[i] != ICAL_RECURRENCE_ARRAY_MAX; i++) {
+                 i < limit; i++) {
                 if (j == 3) { /* BYDAY */
                     int pos = icalrecurrencetype_day_position(array[i]);
                     int dow = icalrecurrencetype_day_day_of_week(array[i]);
@@ -771,8 +865,7 @@ char *icalrecurrencetype_as_string_r(struct icalrecurrencetype *recur)
                     icalmemory_append_string(&str, &str_p, &buf_sz, temp);
                 }
 
-                if ((i + 1) < limit &&
-                    array[i + 1] != ICAL_RECURRENCE_ARRAY_MAX) {
+                if ((i + 1) < limit) {
                     icalmemory_append_char(&str, &str_p, &buf_sz, ',');
                 }
             }
@@ -859,7 +952,9 @@ struct icalrecur_iterator_impl
     short by_indices[9];
     short orig_data[9]; /**< 1 if there was data in the byrule */
 
-    short *by_ptrs[9]; /**< Pointers into the by_* array elements of the rule */
+	short **by_ptrs[9]; /**< Pointers into the by_* array elements of the rule */
+	short *by_ptr_sizes[9]; /**< Pointers into the by_* array elements of the rule */
+	short by_simpleBuffers[9];
 
 };
 
@@ -883,17 +978,6 @@ static unsigned long daysmask_getbit(unsigned long mask[], short n)
 {
     n += ICAL_YEARDAYS_MASK_OFFSET;
     return (mask[n / BITS_PER_LONG] >> (n % BITS_PER_LONG)) & 1;
-}
-
-int icalrecur_iterator_sizeof_byarray(short *byarray)
-{
-    int array_itr;
-
-    for (array_itr = 0;
-         byarray[array_itr] != ICAL_RECURRENCE_ARRAY_MAX; array_itr++) {
-    }
-
-    return array_itr;
 }
 
 enum expand_table
@@ -947,8 +1031,10 @@ static void setup_defaults(icalrecur_iterator *impl,
 
         /* Re-write the BY rule arrays with data from the DTSTART time so
            we don't have to explicitly deal with DTSTART */
-        if (impl->by_ptrs[byrule][0] == ICAL_RECURRENCE_ARRAY_MAX) {
-            impl->by_ptrs[byrule][0] = (short)deftime;
+        if (*impl->by_ptr_sizes[byrule] == 0) {
+			impl->by_simpleBuffers[byrule] = (short)deftime;
+            *impl->by_ptrs[byrule] = &impl->by_simpleBuffers[byrule];
+			*impl->by_ptr_sizes[byrule] = 1;
         }
     }
 }
@@ -1288,7 +1374,7 @@ static int validate_byrule(icalrecur_iterator *impl,
 {
     if (has_by_data(impl, byrule)) {
         UErrorCode status = U_ZERO_ERROR;
-        short *by_ptr = impl->by_ptrs[byrule];
+        short *by_ptr = *impl->by_ptrs[byrule];
         short max =
             (short)ucal_getLimit(impl->rscale, field, UCAL_MAXIMUM, &status);
         short idx;
@@ -1451,11 +1537,11 @@ static void set_datetime(icalrecur_iterator *impl, icaltimetype date)
                          (int32_t) (date.month - 1), /* UCal is 0-based */
                          (int32_t) date.day,
                          (int32_t) (has_by_data(impl, BY_HOUR) ?
-                                    impl->by_ptrs[BY_HOUR][0] : impl->rstart.hour),
+                                    (*impl->by_ptrs[BY_HOUR])[0] : impl->rstart.hour),
                          (int32_t) (has_by_data(impl, BY_MINUTE) ?
-                                    impl->by_ptrs[BY_MINUTE][0] : impl->rstart.minute),
+                                    (*impl->by_ptrs[BY_MINUTE])[0] : impl->rstart.minute),
                          (int32_t) (has_by_data(impl, BY_SECOND) ?
-                                    impl->by_ptrs[BY_SECOND][0] : impl->rstart.second),
+                                    (*impl->by_ptrs[BY_SECOND])[0] : impl->rstart.second),
                          &status);
     }
 
@@ -1738,11 +1824,11 @@ static void set_datetime(icalrecur_iterator *impl, icaltimetype date)
 
     if (!impl->dtstart.is_date) {
         impl->last.hour = has_by_data(impl, BY_HOUR) ?
-            impl->by_ptrs[BY_HOUR][0] : impl->dtstart.hour;
+            (*impl->by_ptrs[BY_HOUR])[0] : impl->dtstart.hour;
         impl->last.minute = has_by_data(impl, BY_MINUTE) ?
-            impl->by_ptrs[BY_MINUTE][0] : impl->dtstart.minute;
+            (*impl->by_ptrs[BY_MINUTE])[0] : impl->dtstart.minute;
         impl->last.second = has_by_data(impl, BY_SECOND) ?
-            impl->by_ptrs[BY_SECOND][0] : impl->dtstart.second;
+            (*impl->by_ptrs[BY_SECOND])[0] : impl->dtstart.second;
     }
 }
 
@@ -1783,13 +1869,13 @@ static void adjust_to_byday(icalrecur_iterator *impl)
      * day. This should probably be abstracted to make such assumption
      * more explicit. */
     short this_dow = (short)get_day_of_week(impl);
-    short dow = (short)(impl->by_ptrs[BY_DAY][0] - this_dow);
+    short dow = (short)((*impl->by_ptrs[BY_DAY])[0] - this_dow);
 
     /* Normalize day of week around week start */
     if (dow != 0 && this_dow < (short)impl->rule.week_start)
         dow -= 7;
 
-    if ((this_dow < impl->by_ptrs[BY_DAY][0] && dow >= 0) || dow < 0) {
+    if ((this_dow < (*impl->by_ptrs[BY_DAY])[0] && dow >= 0) || dow < 0) {
         /* initial time is after first day of BY_DAY data */
         increment_monthday(impl, dow);
     }
@@ -1838,17 +1924,27 @@ icalrecur_iterator *icalrecur_iterator_new(struct icalrecurrencetype rule,
     /* Set up convenience pointers to make the code simpler. Allows
        us to iterate through all of the BY* arrays in the rule. */
 
-    impl->by_ptrs[BY_MONTH] = impl->rule.by_month;
-    impl->by_ptrs[BY_WEEK_NO] = impl->rule.by_week_no;
-    impl->by_ptrs[BY_YEAR_DAY] = impl->rule.by_year_day;
-    impl->by_ptrs[BY_MONTH_DAY] = impl->rule.by_month_day;
-    impl->by_ptrs[BY_DAY] = impl->rule.by_day;
-    impl->by_ptrs[BY_HOUR] = impl->rule.by_hour;
-    impl->by_ptrs[BY_MINUTE] = impl->rule.by_minute;
-    impl->by_ptrs[BY_SECOND] = impl->rule.by_second;
-    impl->by_ptrs[BY_SET_POS] = impl->rule.by_set_pos;
+	impl->by_ptrs[BY_MONTH] = &impl->rule.by_month;
+	impl->by_ptrs[BY_WEEK_NO] = &impl->rule.by_week_no;
+	impl->by_ptrs[BY_YEAR_DAY] = &impl->rule.by_year_day;
+	impl->by_ptrs[BY_MONTH_DAY] = &impl->rule.by_month_day;
+	impl->by_ptrs[BY_DAY] = &impl->rule.by_day;
+	impl->by_ptrs[BY_HOUR] = &impl->rule.by_hour;
+	impl->by_ptrs[BY_MINUTE] = &impl->rule.by_minute;
+	impl->by_ptrs[BY_SECOND] = &impl->rule.by_second;
+	impl->by_ptrs[BY_SET_POS] = &impl->rule.by_set_pos;
 
-    memset(impl->orig_data, 0, 9 * sizeof(short));
+	impl->by_ptr_sizes[BY_MONTH] = &impl->rule.by_month_size;
+	impl->by_ptr_sizes[BY_WEEK_NO] = &impl->rule.by_week_no_size;
+	impl->by_ptr_sizes[BY_YEAR_DAY] = &impl->rule.by_year_day_size;
+	impl->by_ptr_sizes[BY_MONTH_DAY] = &impl->rule.by_month_day_size;
+	impl->by_ptr_sizes[BY_DAY] = &impl->rule.by_day_size;
+	impl->by_ptr_sizes[BY_HOUR] = &impl->rule.by_hour_size;
+	impl->by_ptr_sizes[BY_MINUTE] = &impl->rule.by_minute_size;
+	impl->by_ptr_sizes[BY_SECOND] = &impl->rule.by_second_size;
+	impl->by_ptr_sizes[BY_SET_POS] = &impl->rule.by_set_pos_size;
+
+	memset(impl->orig_data, 0, 9 * sizeof(short));
 
     /* Note which by rules had data in them when the iterator was
        created. We can't use the actual by_x arrays, because the
@@ -1856,29 +1952,29 @@ icalrecur_iterator *icalrecur_iterator_new(struct icalrecurrencetype rule,
        routine. The orig_data array will be used later in has_by_data */
 
     impl->orig_data[BY_MONTH] =
-      (short)(impl->rule.by_month[0] != ICAL_RECURRENCE_ARRAY_MAX);
+      (short)(impl->rule.by_month_size != 0);
     impl->orig_data[BY_WEEK_NO] =
-      (short)(impl->rule.by_week_no[0] != ICAL_RECURRENCE_ARRAY_MAX);
+      (short)(impl->rule.by_week_no_size != 0);
     impl->orig_data[BY_YEAR_DAY] =
-      (short)(impl->rule.by_year_day[0] != ICAL_RECURRENCE_ARRAY_MAX);
+      (short)(impl->rule.by_year_day_size != 0);
     impl->orig_data[BY_MONTH_DAY] =
-      (short)(impl->rule.by_month_day[0] != ICAL_RECURRENCE_ARRAY_MAX);
+      (short)(impl->rule.by_month_day_size != 0);
     impl->orig_data[BY_DAY] =
-      (short)(impl->rule.by_day[0] != ICAL_RECURRENCE_ARRAY_MAX);
+      (short)(impl->rule.by_day_size != 0);
     impl->orig_data[BY_HOUR] =
-      (short)(impl->rule.by_hour[0] != ICAL_RECURRENCE_ARRAY_MAX);
+      (short)(impl->rule.by_hour_size != 0);
     impl->orig_data[BY_MINUTE] =
-      (short)(impl->rule.by_minute[0] != ICAL_RECURRENCE_ARRAY_MAX);
+      (short)(impl->rule.by_minute_size != 0);
     impl->orig_data[BY_SECOND] =
-      (short)(impl->rule.by_second[0] != ICAL_RECURRENCE_ARRAY_MAX);
+      (short)(impl->rule.by_second_size != 0);
     impl->orig_data[BY_SET_POS] =
-      (short)(impl->rule.by_set_pos[0] != ICAL_RECURRENCE_ARRAY_MAX);
+      (short)(impl->rule.by_set_pos_size != 0);
 
     /* Check if the recurrence rule is legal */
 
     for (byrule = BY_SECOND; byrule <= BY_SET_POS; byrule++) {
         if (expand_map[freq].map[byrule] == ILLEGAL &&
-            impl->by_ptrs[byrule][0] != ICAL_RECURRENCE_ARRAY_MAX) {
+            *impl->by_ptr_sizes[byrule] != 0) {
             icalerror_set_errno(ICAL_MALFORMEDDATA_ERROR);
             icalmemory_free_buffer(impl);
             return 0;
@@ -1958,7 +2054,7 @@ static void increment_month(icalrecur_iterator *impl)
         do {
             BYMONIDX++;
 
-            if (BYMONPTR[BYMONIDX] == ICAL_RECURRENCE_ARRAY_MAX) {
+            if (BYMONIDX >= BYMONSIZE) {
                 BYMONIDX = 0;
 
                 increment_year(impl, 1);
@@ -2016,7 +2112,7 @@ void test_increment()
 static int next_second(icalrecur_iterator *impl)
 {
     int has_by_second =
-        (impl->by_ptrs[BY_SECOND][0] != ICAL_RECURRENCE_ARRAY_MAX);
+        (*impl->by_ptr_sizes[BY_SECOND] != 0);
     int this_frequency = (impl->rule.freq == ICAL_SECONDLY_RECURRENCE);
 
     int end_of_data = 0;
@@ -2028,14 +2124,13 @@ static int next_second(icalrecur_iterator *impl)
 
         impl->by_indices[BY_SECOND]++;
 
-        if (impl->by_ptrs[BY_SECOND][impl->by_indices[BY_SECOND]] ==
-            ICAL_RECURRENCE_ARRAY_MAX) {
+        if (*impl->by_ptr_sizes[BY_SECOND] <= impl->by_indices[BY_SECOND]) {
             impl->by_indices[BY_SECOND] = 0;
 
             end_of_data = 1;
         }
 
-        set_second(impl, impl->by_ptrs[BY_SECOND][impl->by_indices[BY_SECOND]]);
+        set_second(impl, (*impl->by_ptrs[BY_SECOND])[impl->by_indices[BY_SECOND]]);
 
     } else if (!has_by_second && this_frequency) {
         /* Compute the next value from the last time and the freq interval */
@@ -2055,7 +2150,7 @@ static int next_second(icalrecur_iterator *impl)
 static int next_minute(icalrecur_iterator *impl)
 {
     int has_by_minute =
-        (impl->by_ptrs[BY_MINUTE][0] != ICAL_RECURRENCE_ARRAY_MAX);
+        (*impl->by_ptr_sizes[BY_MINUTE] != 0);
     int this_frequency = (impl->rule.freq == ICAL_MINUTELY_RECURRENCE);
 
     int end_of_data = 0;
@@ -2071,15 +2166,14 @@ static int next_minute(icalrecur_iterator *impl)
 
         impl->by_indices[BY_MINUTE]++;
 
-        if (impl->by_ptrs[BY_MINUTE][impl->by_indices[BY_MINUTE]]
-            == ICAL_RECURRENCE_ARRAY_MAX) {
+        if (impl->by_indices[BY_MINUTE] >= *impl->by_ptr_sizes[BY_MINUTE]) {
 
             impl->by_indices[BY_MINUTE] = 0;
 
             end_of_data = 1;
         }
 
-        set_minute(impl, impl->by_ptrs[BY_MINUTE][impl->by_indices[BY_MINUTE]]);
+        set_minute(impl, (*impl->by_ptrs[BY_MINUTE])[impl->by_indices[BY_MINUTE]]);
 
     } else if (!has_by_minute && this_frequency) {
         /* Compute the next value from the last time and the freq interval */
@@ -2098,7 +2192,7 @@ static int next_minute(icalrecur_iterator *impl)
 
 static int next_hour(icalrecur_iterator *impl)
 {
-    int has_by_hour = (impl->by_ptrs[BY_HOUR][0] != ICAL_RECURRENCE_ARRAY_MAX);
+    int has_by_hour = (*impl->by_ptr_sizes[BY_HOUR] != 0);
     int this_frequency = (impl->rule.freq == ICAL_HOURLY_RECURRENCE);
 
     int end_of_data = 0;
@@ -2114,14 +2208,13 @@ static int next_hour(icalrecur_iterator *impl)
 
         impl->by_indices[BY_HOUR]++;
 
-        if (impl->by_ptrs[BY_HOUR][impl->by_indices[BY_HOUR]] ==
-            ICAL_RECURRENCE_ARRAY_MAX) {
+        if (impl->by_indices[BY_HOUR] >= *impl->by_ptr_sizes[BY_HOUR]) {
             impl->by_indices[BY_HOUR] = 0;
 
             end_of_data = 1;
         }
 
-        set_hour(impl, impl->by_ptrs[BY_HOUR][impl->by_indices[BY_HOUR]]);
+        set_hour(impl, (*impl->by_ptrs[BY_HOUR])[impl->by_indices[BY_HOUR]]);
 
     } else if (!has_by_hour && this_frequency) {
         /* Compute the next value from the last time and the freq interval */
@@ -2140,7 +2233,7 @@ static int next_hour(icalrecur_iterator *impl)
 
 static int next_day(icalrecur_iterator *impl)
 {
-    int has_by_day = (impl->by_ptrs[BY_DAY][0] != ICAL_RECURRENCE_ARRAY_MAX);
+    int has_by_day = (*impl->by_ptr_sizes[BY_DAY] != 0);
     int this_frequency = (impl->rule.freq == ICAL_DAILY_RECURRENCE);
 
     assert(has_by_day || this_frequency);
@@ -2169,8 +2262,7 @@ static int check_set_position(icalrecur_iterator *impl, int set_pos)
     int found = 0;
 
     for (i = 0;
-         i < ICAL_BY_SETPOS_SIZE &&
-             impl->rule.by_set_pos[i] != ICAL_RECURRENCE_ARRAY_MAX;
+         i < impl->rule.by_set_pos_size;
          i++) {
         if (impl->rule.by_set_pos[i] == set_pos) {
             found = 1;
@@ -2186,7 +2278,7 @@ static int expand_bymonth_days(icalrecur_iterator *impl, int year, int month)
     int i, set_pos_total = 0;
     int days_in_month = get_days_in_month(impl, month, year);
 
-    for (i = 0; BYMDPTR[i] != ICAL_RECURRENCE_ARRAY_MAX; i++) {
+    for (i = 0; i < BYMDSIZE; i++) {
         short doy = 0, mday = BYMDPTR[i];
         int this_month = month;
 
@@ -2249,7 +2341,7 @@ static int expand_by_day(icalrecur_iterator *impl, int year,
 
     daysmask_clearall(bydays);
 
-    for (i = 0; BYDAYPTR[i] != ICAL_RECURRENCE_ARRAY_MAX; i++) {
+    for (i = 0; i < BYDAYSIZE; i++) {
         /* This is 1 (Sun) to 7 (Sat). */
         int dow = icalrecurrencetype_day_day_of_week(BYDAYPTR[i]);
         int pos = icalrecurrencetype_day_position(BYDAYPTR[i]);
@@ -2294,7 +2386,7 @@ static int expand_by_day(icalrecur_iterator *impl, int year,
                 /* Make sure our day falls in one of the BYWEEKNO */
                 int j;
 
-                for (j = 0; BYWEEKPTR[j] != ICAL_RECURRENCE_ARRAY_MAX; j++) {
+                for (j = 0; j < BYWEEKSIZE; j++) {
                     int weekno = BYWEEKPTR[j];
 
                     if (weekno != this_weekno) valid = 0;
@@ -2431,7 +2523,7 @@ static int next_weekday_by_week(icalrecur_iterator *impl)
         BYDAYIDX++;     /* Look at next elem in BYDAY array */
 
         /* Are we at the end of the BYDAY array? */
-        if (BYDAYPTR[BYDAYIDX] == ICAL_RECURRENCE_ARRAY_MAX) {
+        if (BYDAYIDX >= BYDAYSIZE) {
             BYDAYIDX = 0;       /* Reset to 0 */
             end_of_data = 1;    /* Signal that we're at the end */
         }
@@ -2507,7 +2599,7 @@ static int expand_year_days(icalrecur_iterator *impl, int year)
         }
 
         /* Add each BYYEARDAY to the year days bitmask */
-        for (i = 0; BYYDPTR[i] != ICAL_RECURRENCE_ARRAY_MAX; i++) {
+        for (i = 0; i < BYYDSIZE; i++) {
             doy = BYYDPTR[i];
 
             if (abs(doy) > days_in_year) {
@@ -2563,7 +2655,7 @@ static int expand_year_days(icalrecur_iterator *impl, int year)
         start_doy = doy - 7 * (weekno - 1);
 
         /* Add day of week in each BYWEEKNO to the year days bitmask */
-        for (i = 0; BYWEEKPTR[i] != ICAL_RECURRENCE_ARRAY_MAX; i++) {
+        for (i = 0; i < BYWEEKSIZE; i++) {
             weekno = BYWEEKPTR[i];
 
             doy = start_doy + 7 * (weekno - 1);
@@ -2574,7 +2666,7 @@ static int expand_year_days(icalrecur_iterator *impl, int year)
         }
     } else {
         /* Add each BYMONTHDAY in each BYMONTH to the year days bitmask */
-        for (i = 0; BYMONPTR[i] != ICAL_RECURRENCE_ARRAY_MAX; i++) {
+        for (i = 0; i < BYMONSIZE; i++) {
             int month = set_month(impl, BYMONPTR[i]);
 
             if (month) set_pos_total += expand_bymonth_days(impl, year, month);
@@ -2593,7 +2685,7 @@ static int expand_year_days(icalrecur_iterator *impl, int year)
         if (has_by_data(impl, BY_MONTH)) {
             /* Numeric BYDAY are within each month */
 
-            for (i = 0; BYMONPTR[i] != ICAL_RECURRENCE_ARRAY_MAX; i++) {
+            for (i = 0; i < BYMONSIZE; i++) {
                 short month = BYMONPTR[i];
                 int doy_offset, days_in_month;
 
@@ -2755,10 +2847,10 @@ int icalrecur_check_rulepart(icalrecur_iterator *impl,
 {
     int itr;
 
-    if (impl->by_ptrs[byrule][0] != ICAL_RECURRENCE_ARRAY_MAX) {
+    if (*impl->by_ptr_sizes[byrule] != 0) {
         for (itr = 0;
-             impl->by_ptrs[byrule][itr] != ICAL_RECURRENCE_ARRAY_MAX; itr++) {
-            if (impl->by_ptrs[byrule][itr] == v) {
+             itr < *impl->by_ptr_sizes[byrule]; itr++) {
+            if ((*impl->by_ptrs[byrule])[itr] == v) {
                 return 1;
             }
         }
@@ -2774,11 +2866,11 @@ static int check_contract_restriction(icalrecur_iterator *impl,
     int itr;
     icalrecurrencetype_frequency freq = impl->rule.freq;
 
-    if (impl->by_ptrs[byrule][0] != ICAL_RECURRENCE_ARRAY_MAX &&
+    if (*impl->by_ptr_sizes[byrule] != 0 &&
         expand_map[freq].map[byrule] == CONTRACT) {
         for (itr = 0;
-             impl->by_ptrs[byrule][itr] != ICAL_RECURRENCE_ARRAY_MAX; itr++) {
-            if (impl->by_ptrs[byrule][itr] == v) {
+             itr < *impl->by_ptr_sizes[byrule]; itr++) {
+            if ((*impl->by_ptrs[byrule])[itr] == v) {
                 pass = 1;
                 break;
             }
@@ -2976,10 +3068,12 @@ static int __iterator_set_start(icalrecur_iterator *impl, icaltimetype start)
         break;
 
     case ICAL_WEEKLY_RECURRENCE:
-        if (impl->by_ptrs[BY_DAY][0] == ICAL_RECURRENCE_ARRAY_MAX) {
+        if (*impl->by_ptr_sizes[BY_DAY] == 0) {
             /* Weekly recurrences with no BY_DAY data should occur on the
                same day of the week as the start time . */
-            impl->by_ptrs[BY_DAY][0] = (short)get_day_of_week(impl);
+			*impl->by_ptrs[BY_DAY] = &impl->by_simpleBuffers[BY_DAY];
+            (*impl->by_ptrs[BY_DAY])[0] = (short)get_day_of_week(impl);
+			*impl->by_ptr_sizes[BY_DAY] = 1;
 
         } else {
             adjust_to_byday(impl);
@@ -3063,7 +3157,7 @@ int icalrecur_iterator_set_end(icalrecur_iterator *impl,
 void icalrecurrencetype_clear(struct icalrecurrencetype *recur)
 {
     memset(recur,
-           ICAL_RECURRENCE_ARRAY_MAX_BYTE, sizeof(struct icalrecurrencetype));
+           0, sizeof(struct icalrecurrencetype));
 
     recur->week_start = ICAL_MONDAY_WEEKDAY;
     recur->freq = ICAL_NO_RECURRENCE;
@@ -3128,7 +3222,7 @@ int icalrecurrencetype_month_month(short month)
 int icalrecur_expand_recurrence(const char *rule,
                                 time_t start, int count, time_t *array)
 {
-    struct icalrecurrencetype recur;
+    struct icalrecurrencetype* recur;
     icalrecur_iterator *ritr;
     time_t tt;
     struct icaltimetype icstart, next;
@@ -3139,7 +3233,7 @@ int icalrecur_expand_recurrence(const char *rule,
     icstart = icaltime_from_timet_with_zone(start, 0, 0);
 
     recur = icalrecurrencetype_from_string(rule);
-    ritr = icalrecur_iterator_new(recur, icstart);
+    ritr = icalrecur_iterator_new(*recur, icstart);
     if (ritr) {
         for (next = icalrecur_iterator_next(ritr);
              !icaltime_is_null_time(next) && i < count;
@@ -3153,7 +3247,11 @@ int icalrecur_expand_recurrence(const char *rule,
         }
         icalrecur_iterator_free(ritr);
     }
-    icalmemory_free_buffer(recur.rscale);
+    icalmemory_free_buffer(recur->rscale);
+	recur->rscale = 0;
+
+	icalrecurrencetype_free(recur);
+
 
     return 1;
 }

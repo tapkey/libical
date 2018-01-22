@@ -678,8 +678,8 @@ void test_component_foreach()
 void test_recur_iterator_set_start()
 {
     icaltimetype start = icaltime_from_string("20150526");
-    struct icalrecurrencetype recurrence = icalrecurrencetype_from_string("FREQ=WEEKLY");
-    icalrecur_iterator *iterator = icalrecur_iterator_new(recurrence, start);
+    struct icalrecurrencetype *recurrence = icalrecurrencetype_from_string("FREQ=WEEKLY");
+    icalrecur_iterator *iterator = icalrecur_iterator_new(*recurrence, start);
 
     icaltimetype next = icalrecur_iterator_next(iterator);
 
@@ -1191,7 +1191,7 @@ void print_occur(struct icalrecurrencetype recur, struct icaltimetype start)
 
 void test_recur()
 {
-    struct icalrecurrencetype rt;
+    struct icalrecurrencetype* rt;
     struct icaltimetype start;
     time_t array[25];
     int i;
@@ -1201,7 +1201,7 @@ void test_recur()
     start = icaltime_from_string("19970905T090000Z");
 
     if (VERBOSE)
-        print_occur(rt, start);
+        print_occur(*rt, start);
 
     if (VERBOSE)
         printf("\n  Using icalrecur_expand_recurrence\n");
@@ -1214,6 +1214,8 @@ void test_recur()
         if (VERBOSE)
             printf("  %s", ctime(&(array[i])));
     }
+
+	icalrecurrencetype_free(rt);
 
 /*    test_increment();*/
 }
@@ -2549,18 +2551,20 @@ void test_time_parser()
 
 void test_recur_parser()
 {
-    struct icalrecurrencetype rt;
+    struct icalrecurrencetype* rt;
     const char *str;
 
     str =
         "FREQ=YEARLY;UNTIL=20000131T090000Z;BYDAY=-1TU,3WE,-4FR,SA,SU;BYYEARDAY=34,65,76,78;BYMONTH=1,2,3,4,8";
     rt = icalrecurrencetype_from_string(str);
-    str_is(str, icalrecurrencetype_as_string(&rt), str);
+    str_is(str, icalrecurrencetype_as_string(rt), str);
+	icalrecurrencetype_free(rt);
 
     str = "FREQ=DAILY;COUNT=3;BYDAY=-1TU,3WE,-4FR,SA,SU;BYYEARDAY=34,65,76,78;BYMONTH=1,2,3,4,8";
 
     rt = icalrecurrencetype_from_string(str);
-    str_is(str, icalrecurrencetype_as_string(&rt), str);
+    str_is(str, icalrecurrencetype_as_string(rt), str);
+	icalrecurrencetype_free(rt);
 }
 
 char *ical_strstr(const char *haystack, const char *needle)
