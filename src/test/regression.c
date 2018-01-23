@@ -4147,6 +4147,55 @@ void test_out_of_memory() {
     // buffer) that makes this kind of test hard to implement.
 }
 
+#if ADD_TESTS_REQUIRING_INVESTIGATION
+
+struct test_qsort_context {
+    char* list;
+    size_t item_count;
+    size_t item_size;
+};
+
+static void test_qsort_swap(void *callback_context, size_t i1, size_t i2) {
+    struct test_qsort_context *context = (struct test_qsort_context *)callback_context;
+    qsort_gen_memswap(((unsigned char *)(context->list + i1 * context->item_size)), ((unsigned char *)(context->list + i2 * context->item_size)), context->item_size);
+}
+
+static int test_qsort_compare(const void *callback_context, size_t i1, size_t i2) {
+    struct test_qsort_context *context = (struct test_qsort_context *)callback_context;
+    return *((unsigned char *) (context->list + i1 * context->item_size)) - *((unsigned char *) (context->list + i2 * context->item_size));
+}
+
+void test_qsort(void)
+{
+    /* this test is based on the work from the PDCLib project */
+
+    char presort[] = { "shreicnyjqpvozxmbt" };
+    char sorted1[] = { "bcehijmnopqrstvxyz" };
+    char sorted2[] = { "bticjqnyozpvreshxm" };
+    char s[19];
+    struct test_qsort_context context;
+
+    context.list = s;
+    context.item_count = 18;
+    context.item_size = 1;
+    strcpy(s, presort);
+    qsort_gen((void*) &context, context.item_count, test_qsort_compare, test_qsort_swap);
+    ok("qsort sorted array with item size 1 as expected", strcmp(s, sorted1) == 0);
+
+    strcpy(s, presort);
+    context.item_count = 9;
+    context.item_size = 2;
+    qsort_gen((void*) &context, context.item_count, test_qsort_compare, test_qsort_swap);
+    ok("qsort sorted array with item size 2 as expected", strcmp(s, sorted2) == 0);
+
+    strcpy(s, presort);
+    context.item_count = 1;
+    context.item_size = 1;
+    qsort_gen((void*) &context, context.item_count, test_qsort_compare, test_qsort_swap);
+    ok("qsort sorted a single item array correctly.", strcmp(s, presort) == 0);
+}
+#endif
+
 int main(int argc, char *argv[])
 {
 #if !defined(HAVE_UNISTD_H)
@@ -4276,6 +4325,10 @@ int main(int argc, char *argv[])
     test_run("Test comma in quoted value of x property", test_comma_in_quoted_value, do_test,
              do_header);
     test_run("Test out of memory", test_out_of_memory, do_test, do_header);
+
+#if ADD_TESTS_REQUIRING_INVESTIGATION
+    test_run("Test qsort", test_qsort, do_test, do_header);
+#endif
 
     /** OPTIONAL TESTS go here... **/
 
