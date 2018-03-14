@@ -303,7 +303,7 @@ void icalparameter_set_${lc}(icalparameter *param, ${type} v)
     icalerror_clear_errno();
 
     if (param->string != NULL) {
-        free((void *)param->string);
+        icalmemory_free_buffer((void *)param->string);
     }
     $set_code
 }
