@@ -2,3 +2,5 @@
 *~
 *.rej
 *.orig
+/build
+/vs
