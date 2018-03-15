@@ -23,7 +23,10 @@
 #include "icalarray.h"
 #include "icalerror.h"
 #include "icalmemory.h"
+
+#ifndef ICAL_TINY
 #include "qsort_gen.h"
+#endif
 
 #include <stdlib.h>
 #include <string.h>
@@ -149,6 +152,7 @@ void icalarray_remove_element_at(icalarray *array, size_t position)
     array->num_elements--;
 }
 
+#ifndef ICAL_TINY
 struct _icalarray_sort_context {
 
     icalarray* array;
@@ -184,6 +188,7 @@ void icalarray_sort(icalarray *array, int (*compare) (const void *, const void *
 
     qsort_gen(&sort_context, array->num_elements, icalarray_fcompare, icalarray_fswap);
 }
+#endif // ICAL_TINY
 
 static void icalarray_expand(icalarray *array, size_t space_needed)
 {

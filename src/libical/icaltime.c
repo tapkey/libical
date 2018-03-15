@@ -56,7 +56,9 @@
 #include "astime.h"
 #include "icalerror.h"
 #include "icalmemory.h"
+#ifndef ICAL_TINY
 #include "icaltimezone.h"
+#endif
 
 #include <ctype.h>
 #include <stdlib.h>
@@ -181,6 +183,7 @@ static time_t make_time(struct tm *tm, int tzm)
     return (tim);
 }
 
+#ifndef ICAL_TINY
 /**     @brief Constructor.
  *
  *      @param tm The time
@@ -260,6 +263,7 @@ struct icaltimetype icaltime_today(void)
 {
     return icaltime_from_timet_with_zone(time(NULL), 1, NULL);
 }
+#endif // ICAL_TINY
 
 time_t icaltime_as_timet(const struct icaltimetype tt)
 {
@@ -292,6 +296,7 @@ time_t icaltime_as_timet(const struct icaltimetype tt)
     return t;
 }
 
+#ifndef ICAL_TINY
 /**     Return the time as seconds past the UNIX epoch, using the
  *      given timezone.
  *
@@ -375,6 +380,7 @@ char *icaltime_as_ical_string_r(const struct icaltimetype tt)
 
     return buf;
 }
+#endif // ICAL_TINY
 
 /**
  *      Reset all of the time components to be in their normal ranges. For
@@ -393,6 +399,7 @@ struct icaltimetype icaltime_normalize(const struct icaltimetype tt)
     return ret;
 }
 
+#ifndef ICAL_TINY
 /**     @brief Contructor.
  *
  * Create a time from an ISO format string.
@@ -477,6 +484,7 @@ struct icaltimetype icaltime_from_string(const char *str)
     icalerror_set_errno(ICAL_MALFORMEDDATA_ERROR);
     return icaltime_null_time();
 }
+#endif // ICAL_TINY
 
 /* Returns whether the specified year is a leap year. Year is the normal year,
    e.g. 2001. */
@@ -699,6 +707,7 @@ int icaltime_is_date(const struct icaltimetype t)
     return t.is_date;
 }
 
+#ifndef ICAL_TINY
 /**     @brief Returns true if time is relative to UTC zone
  *
  *      @todo  We should only check the zone
@@ -707,6 +716,7 @@ int icaltime_is_utc(const struct icaltimetype t)
 {
     return t.zone == icaltimezone_get_utc_timezone();
 }
+#endif // ICAL_TINY
 
 /**
  *      Return true if the time is null.
@@ -732,10 +742,13 @@ int icaltime_compare(const struct icaltimetype a_in, const struct icaltimetype b
 
     /* We only need to perform time zone conversion if times aren't in the same time zone
        or neither of them is floating (zone equals NULL) */
+#ifndef ICAL_TINY
     if (a_in.zone != b_in.zone && a_in.zone != NULL && b_in.zone != NULL) {
         a = icaltime_convert_to_zone(a_in, icaltimezone_get_utc_timezone());
         b = icaltime_convert_to_zone(b_in, icaltimezone_get_utc_timezone());
-    } else {
+    } else
+#endif // ICAL_TINY
+    {
         a = a_in;
         b = b_in;
     }
@@ -789,10 +802,15 @@ int icaltime_compare_date_only(const struct icaltimetype a_in,
                                const struct icaltimetype b_in)
 {
     struct icaltimetype a, b;
+#ifndef ICAL_TINY
     icaltimezone *tz = icaltimezone_get_utc_timezone();
 
     a = icaltime_convert_to_zone(a_in, tz);
     b = icaltime_convert_to_zone(b_in, tz);
+#else
+    a = a_in;
+    b = b_in;
+#endif // ICAL_TINY
 
     if (a.year > b.year) {
         return 1;
@@ -825,8 +843,13 @@ int icaltime_compare_date_only_tz(const struct icaltimetype a_in,
 {
     struct icaltimetype a, b;
 
+#ifndef ICAL_TINY
     a = icaltime_convert_to_zone(a_in, tz);
     b = icaltime_convert_to_zone(b_in, tz);
+#else
+    a = a_in;
+    b = b_in;
+#endif // ICAL_TINY
 
     if (a.year > b.year) {
         return 1;
@@ -947,6 +970,7 @@ void icaltime_adjust(struct icaltimetype *tt,
     tt->day = day;
 }
 
+#ifndef ICAL_TINY
 /**     @brief Convert time to a given timezone
  *
  *      Convert a time from its native timezone to a given timezone.
@@ -1021,6 +1045,7 @@ struct icaltimetype icaltime_set_timezone(struct icaltimetype *t, const icaltime
 
     return *t;
 }
+#endif // ICAL_TINY
 
 /**
  *  @brief builds an icaltimespan given a start time, end time and busy value.
@@ -1040,9 +1065,13 @@ icaltime_span icaltime_span_new(struct icaltimetype dtstart, struct icaltimetype
 
     span.is_busy = is_busy;
 
+#ifndef ICAL_TINY
     span.start = icaltime_as_timet_with_zone(dtstart,
                                              dtstart.zone ? dtstart.
                                              zone : icaltimezone_get_utc_timezone());
+#else
+    span.start = icaltime_as_timet(dtstart);
+#endif // ICAL_TINY
 
     if (icaltime_is_null_time(dtend)) {
         if (!icaltime_is_date(dtstart)) {
@@ -1055,9 +1084,13 @@ icaltime_span icaltime_span_new(struct icaltimetype dtstart, struct icaltimetype
         }
     }
 
+#ifndef ICAL_TINY
     span.end = icaltime_as_timet_with_zone(dtend,
                                            dtend.zone ? dtend.
                                            zone : icaltimezone_get_utc_timezone());
+#else
+    span.end = icaltime_as_timet(dtend);
+#endif // ICAL_TINY
 
     if (icaltime_is_date(dtstart)) {
         /* no time specified, go until the end of the day.. */
