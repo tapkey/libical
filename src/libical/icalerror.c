@@ -91,7 +91,7 @@ void icalerror_crash_here(void)
     *p = 1; /*clang-analyzer false positive. we want a crash*/
 
     /* cppcheck-suppress nullPointer */
-    assert(*p);
+    icalassert(*p);
 }
 
 void icalerror_clear_errno()
@@ -123,7 +123,7 @@ void icalerror_set_errno(icalerrorenum x)
         (icalerror_get_error_state(x) == ICAL_ERROR_DEFAULT && icalerror_errors_are_fatal == 1)) {
         icalerror_warn(icalerror_strerror(x));
         ical_bt();
-        assert(0);
+        icalassert(0);
     }
 }
 

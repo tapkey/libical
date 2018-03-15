@@ -188,10 +188,10 @@ LIBICAL_ICAL_EXPORT int icalerror_get_errors_are_fatal(void);
 
 #ifdef __GNUC__ca
 #define icalerror_warn(message) \
-{fprintf(stderr, "%s(), %s:%d: %s\n", __FUNCTION__, __FILE__, __LINE__, message);}
+{icalerrprintf("%s(), %s:%d: %s\n", __FUNCTION__, __FILE__, __LINE__, message);}
 #else /* __GNU_C__ */
 #define icalerror_warn(message) \
-{fprintf(stderr, "%s:%d: %s\n", __FILE__, __LINE__, message);}
+{icalerrprintf("%s:%d: %s\n", __FILE__, __LINE__, message);}
 #endif /* __GNU_C__ */
 
 /**

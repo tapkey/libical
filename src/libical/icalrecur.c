@@ -628,7 +628,7 @@ struct icalrecurrencetype* icalrecurrencetype_from_string(const char *str)
 
 	if (!(str != 0)) {
 		icalerror_stop_here();
-		assert(0);
+		icalassert(0);
 
         icalmemory_free_buffer(pStorage);
 		return 0;
@@ -2117,7 +2117,7 @@ static int next_second(icalrecur_iterator *impl)
 
     int end_of_data = 0;
 
-    assert(has_by_second || this_frequency);
+    icalassert(has_by_second || this_frequency);
 
     if (has_by_second) {
         /* Ignore the frequency and use the byrule data */
@@ -2155,7 +2155,7 @@ static int next_minute(icalrecur_iterator *impl)
 
     int end_of_data = 0;
 
-    assert(has_by_minute || this_frequency);
+    icalassert(has_by_minute || this_frequency);
 
     if (next_second(impl) == 0) {
         return 0;
@@ -2197,7 +2197,7 @@ static int next_hour(icalrecur_iterator *impl)
 
     int end_of_data = 0;
 
-    assert(has_by_hour || this_frequency);
+    icalassert(has_by_hour || this_frequency);
 
     if (next_minute(impl) == 0) {
         return 0;
@@ -2236,7 +2236,7 @@ static int next_day(icalrecur_iterator *impl)
     int has_by_day = (*impl->by_ptr_sizes[BY_DAY] != 0);
     int this_frequency = (impl->rule.freq == ICAL_DAILY_RECURRENCE);
 
-    assert(has_by_day || this_frequency);
+    icalassert(has_by_day || this_frequency);
     _unused(has_by_day);
 
     if (next_hour(impl) == 0) {
