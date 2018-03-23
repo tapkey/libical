@@ -162,6 +162,7 @@
 #define ICAL_BY_YEARDAY_SIZE    367     /* 1 to 366 */
 #endif
 
+#ifndef ICAL_TINY
 #if (SIZEOF_TIME_T > 4)
 /** Arbitrarily go up to 1000th anniversary of Gregorian calendar, since
     64-bit time_t values get us up to the tm_year limit of 2+ billion years. */
@@ -170,6 +171,10 @@
 /** This is the last year we will go up to, since 32-bit time_t values
    only go up to the start of 2038. */
 #define MAX_TIME_T_YEAR 2037
+#endif
+#else
+// In ICAL_TINY configuration we don't use time_t.
+#define MAX_TIME_T_YEAR 2582
 #endif
 
 #define BYDAYIDX impl->by_indices[BY_DAY]
