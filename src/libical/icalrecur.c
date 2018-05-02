@@ -474,22 +474,21 @@ static int icalrecur_add_byrules(struct icalrecur_parser *parser, short *array, 
  * this may be the common case, the RFC doesn't actually mandate it. This
  * function sorts the days taking into account the first day of week.
  */
-static void sort_bydayrules(struct icalrecur_parser *parser)
-{
-    short *array;
-    int week_start, one, two, i, j;
+static void sort_bydayrules(short* by_day, short by_day_size, icalrecurrencetype_weekday week_start) {
 
-    array = parser->rt.by_day;
-    week_start = parser->rt.week_start;
+    short *array;
+    int one, two, i, j;
+
+    array = by_day;
 
     for (i = 0;
-         i < parser->rt.by_day_size; i++) {
+         i < by_day_size; i++) {
         for (j = 0; j < i; j++) {
-            one = icalrecurrencetype_day_day_of_week(array[j]) - week_start;
+            one = icalrecurrencetype_day_day_of_week(array[j]) - (short) week_start;
             if (one < 0) {
                 one += 7;
             }
-            two = icalrecurrencetype_day_day_of_week(array[i]) - week_start;
+            two = icalrecurrencetype_day_day_of_week(array[i]) - (short) week_start;
             if (two < 0) {
                 two += 7;
             }
@@ -502,6 +501,15 @@ static void sort_bydayrules(struct icalrecur_parser *parser)
             }
         }
     }
+}
+
+static inline void sort_parser_bydayrules(struct icalrecur_parser *parser)
+{
+    sort_bydayrules(parser->rt.by_day, parser->rt.by_day_size, parser->rt.week_start);
+}
+
+void icalrecur_prepare(struct icalrecurrencetype* recurrence) {
+    sort_bydayrules(recurrence->by_day, recurrence->by_day_size, recurrence->week_start);
 }
 
 static int icalrecur_add_bydayrules(struct icalrecur_parser *parser,
@@ -564,7 +572,7 @@ static int icalrecur_add_bydayrules(struct icalrecur_parser *parser,
 
     icalmemory_free_buffer(vals_copy);
 
-    sort_bydayrules(parser);
+    sort_parser_bydayrules(parser);
 
     return 0;
 }
@@ -717,7 +725,7 @@ struct icalrecurrencetype* icalrecurrencetype_from_string(const char *str)
             if (parser.rt.week_start == ICAL_NO_WEEKDAY) {
                 r = -1;
             } else {
-                sort_bydayrules(&parser);
+                sort_parser_bydayrules(&parser);
             }
         } else if (strcasecmp(name, "BYSECOND") == 0) {
             r = icalrecur_add_byrules(&parser, parser.rt.by_second, &parser.rt.by_second_size,

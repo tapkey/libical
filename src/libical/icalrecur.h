@@ -236,6 +236,16 @@ LIBICAL_ICAL_EXPORT short icalrecurrencetype_encode_day(enum icalrecurrencetype_
                                                         int position);
 
 /**
+ * Prepares the recurrence instance for being used for iteration.
+ * Usually, recurrencetypes are populated by this component's parsing functionality, which
+ * provides the instance as expected by this component. However, if an instance is
+ * populated by different means, this function can be used, to prepare the instance
+ * to meet the requirements of this component.
+ * I.e. this function sorts the contained by_day array, if one is present, as required.
+ */
+LIBICAL_ICAL_EXPORT void icalrecur_prepare(struct icalrecurrencetype* recurrence);
+
+/**
  * The @p month element of the by_month array is encoded to allow
  * representation of the "L" leap suffix (RFC 7529).
  * These routines decode the month values.
