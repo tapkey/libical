@@ -960,7 +960,7 @@ void icalcomponent_foreach_recurrence(icalcomponent *comp,
             icaltimetype mystart = start;
 
             /* make sure we include any recurrence that ends in timespan */
-            icaltime_adjust(&mystart, 0, 0, 0, -dtduration);
+            icaltime_adjust(&mystart, 0, 0, 0, -(int)dtduration);
             icalrecur_iterator_set_start(rrule_itr, mystart);
         }
 
@@ -1694,7 +1694,7 @@ void icalcomponent_set_comment(icalcomponent *comp, const char *v)
         icalcomponent_add_property(inner, prop);
     }
 
-    icalproperty_set_summary(prop, v);
+    icalproperty_set_comment(prop, v);
 }
 
 const char *icalcomponent_get_comment(icalcomponent *comp)
@@ -1729,7 +1729,7 @@ void icalcomponent_set_uid(icalcomponent *comp, const char *v)
         icalcomponent_add_property(inner, prop);
     }
 
-    icalproperty_set_summary(prop, v);
+    icalproperty_set_uid(prop, v);
 }
 
 const char *icalcomponent_get_uid(icalcomponent *comp)
