@@ -872,7 +872,7 @@ char *icalrecurrencetype_as_string_r(struct icalrecurrencetype *recur)
     }
 
     for (j = 0; recur_map[j].str != 0; j++) {
-        short **pArray = (short *)(recur_map[j].ptr_offset + (size_t) recur);
+        short **pArray = (short **)(recur_map[j].ptr_offset + (size_t) recur);
 		short *array = *pArray;
 		short *pSize = (short *)(recur_map[j].size_offset + (size_t)recur);
         int limit = *pSize;
