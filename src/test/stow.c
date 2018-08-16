@@ -34,6 +34,7 @@
 #endif
 
 #define TMPSIZE 2048
+#define TMPSIZE_SMALL 128
 #define SENDMAIL "/usr/lib/sendmail -t"
 
 char *program_name;
@@ -156,8 +157,8 @@ char *make_mime(const char *to, const char *from, const char *subject,
 
     char mime_part_1[TMPSIZE];
     char mime_part_2[TMPSIZE];
-    char content_id[TMPSIZE];
-    char boundary[TMPSIZE];
+    char content_id[TMPSIZE_SMALL];
+    char boundary[TMPSIZE_SMALL];
     struct utsname uts;
     char *m;
 
@@ -169,8 +170,8 @@ char *make_mime(const char *to, const char *from, const char *subject,
     uname(&uts);
 
     srand((unsigned int)(time(0) << getpid()));
-    snprintf(content_id, TMPSIZE, "%d-%d@%s", (int)time(0), rand(), uts.nodename);
-    snprintf(boundary, TMPSIZE, "%d-%d-%s", (int)time(0), rand(), uts.nodename);
+    snprintf(content_id, TMPSIZE_SMALL, "%d-%d@%s", (int)time(0), rand(), uts.nodename);
+    snprintf(boundary, TMPSIZE_SMALL, "%d-%d-%s", (int)time(0), rand(), uts.nodename);
 //krazy:cond=style
     snprintf(mime_part_1, TMPSIZE, "Content-ID: %s\n\
 Content-type: text/plain\n\

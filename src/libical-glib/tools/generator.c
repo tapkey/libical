@@ -1142,7 +1142,6 @@ void generate_forward_declarations_header_file(GList *structures)
         if (c == '$') {
             if ((c = fgetc(in)) != '{' && c != '^') {
                 printf("The following char is not {");
-                g_free (buffer);
                 fclose(in);
                 fclose(out);
                 return;
@@ -1446,6 +1445,7 @@ static gboolean is_enum_type(const gchar *type)
         structureKind = g_hash_table_lookup(type2kind, trueType);
         res = g_strcmp0(structureKind, "enum") == 0;
     }
+    g_free (trueType);
 
     return res;
 }
@@ -2059,7 +2059,7 @@ gchar *get_source_run_time_checkers(Method *method, const gchar *namespace)
         if (parameter && parameter->type && parameter->type[strlen(parameter->type) - 1] == '*') {
             trueType = get_true_type(parameter->type);
             for (i = 0;
-                 trueType[i] && i < namespace_len && namespace[i] == trueType[i];
+                 i < namespace_len && trueType[i] && namespace[i] == trueType[i];
                  i++);
 
             if (i == namespace_len) {

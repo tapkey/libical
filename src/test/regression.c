@@ -375,6 +375,18 @@ void test_utf8()
         "END:VEVENT\n"
         "END:VCALENDAR\n";
 
+    const char *utf8_marker =
+	"\xEF\xBB\xBF"
+        "BEGIN:VCALENDAR\n"
+        "PRODID:-//Ximian//NONSGML Evolution Calendar//EN\n"
+        "VERSION:2.0\n"
+        "METHOD:PUBLISH\n"
+        "BEGIN:VEVENT\n"
+        "SUMMARY:  áó aáóaáó aáä\n"
+        "LOCATION:áóaáóaáóaä  áóaáóaáóaáóaáóaáóaáóaáóaáóaáó  aáóaáóaáóaáóaá \n"
+        "END:VEVENT\n"
+        "END:VCALENDAR\n";
+
     prop = icalproperty_new_description(utf8text);
 
     str_is("icalproperty_as_ical_string()", icalproperty_as_ical_string(prop), test_ical_str_good);
@@ -391,6 +403,14 @@ void test_utf8()
     comp = icalcomponent_new_from_string(agenda93);
     ok("parsed", (comp != NULL));
     str_is("summary", icalcomponent_get_summary(comp), "IETF 93 Social Event at the Žofín Palace");
+    icalcomponent_free(comp);
+
+    /* test a string with UTF-8 marker at the beginning */
+    comp = icalcomponent_new_from_string(utf8_marker);
+    ok("parsed", (comp != NULL));
+    ok("kind", (icalcomponent_isa(comp) == ICAL_VCALENDAR_COMPONENT));
+    str_is("location", icalcomponent_get_location(comp), "áóaáóaáóaä  áóaáóaáóaáóaáóaáóaáóaáóaáóaáó  aáóaáóaáóaáóaá");
+    str_is("summary", icalcomponent_get_summary(comp), "áó aáóaáó aáä");
     icalcomponent_free(comp);
 }
 
@@ -4280,6 +4300,167 @@ void test_qsort(void)
 }
 #endif
 
+void test_zoneinfo_stuff(void)
+{
+ #if defined(HAVE_SETENV)
+    setenv("TZDIR", TEST_DATADIR, 1);
+#else
+    char tzdir[256] = {0};
+    strncat(tzdir, "TZDIR=" TEST_DATADIR, 255);
+    putenv(tzdir);
+#endif
+    icaltzutil_set_zone_directory(NULL); /*resets to empty */
+    str_is("icaltzutil_get_zone_directory by TZDIR", icaltzutil_get_zone_directory(), TEST_DATADIR);
+    icaltzutil_set_zone_directory("foo");
+    str_is("icaltzutil_get_zone_directory", icaltzutil_get_zone_directory(), "foo");
+}
+
+void test_tzid_with_utc_time(void)
+{
+    const char *strcomp =
+        "BEGIN:VCALENDAR\r\n"
+        "BEGIN:VTIMEZONE\r\n"
+        "TZID:my_zone\r\n"
+        "BEGIN:STANDARD\r\n"
+        "TZNAME:my_zone\r\n"
+        "DTSTART:19160429T230000\r\n"
+        "TZOFFSETFROM:+0100\r\n"
+        "TZOFFSETTO:+0200\r\n"
+        "RRULE:FREQ=YEARLY;UNTIL=19160430T220000Z;BYDAY=-1SU;BYMONTH=4\r\n"
+        "END:STANDARD\r\n"
+        "END:VTIMEZONE\r\n"
+        "BEGIN:VEVENT\r\n"
+        "UID:0\r\n"
+        "DTSTART;TZID=my_zone:20180101T010000Z\r\n"
+        "DTEND;TZID=my_zone:20180101T030000\r\n"
+        "DUE:20180101T030000Z\r\n"
+        "RRULE:FREQ=HOURLY;UNTIL=20180505T050000Z;BYHOUR=1\r\n"
+        "EXDATE:20180101T010000\r\n"
+        "EXDATE:20180202T020000Z\r\n"
+        "EXDATE;TZID=my_zone:20180303T030000\r\n"
+        "EXDATE;TZID=my_zone:20180404T040000Z\r\n"
+        "END:VEVENT\r\n"
+        "END:VCALENDAR\r\n";
+    struct _exdate_expected {
+        const char *tzid;
+    } exdate_expected[] = {
+        { "" },
+        { "UTC" },
+        { "my_zone" },
+        { "UTC" },
+        { NULL }
+    };
+    icalcomponent *comp, *subcomp;
+    struct icaltimetype dtstart, dtend, due;
+    icalproperty *prop;
+    int idx;
+
+    comp = icalcomponent_new_from_string(strcomp);
+    ok("icalcomponent_new_from_string()", (comp != NULL));
+    subcomp = icalcomponent_get_first_component(comp, ICAL_VEVENT_COMPONENT);
+    ok("get subcomp", (subcomp != NULL));
+
+    dtstart = icalcomponent_get_dtstart(subcomp);
+    dtend = icalcomponent_get_dtend(subcomp);
+    due = icalcomponent_get_due(subcomp);
+
+    ok("DTSTART is UTC", (icaltime_is_utc(dtstart)));
+    ok("DTEND is my_zone", (strcmp(icaltimezone_get_tzid((icaltimezone *) dtend.zone), "my_zone") == 0));
+    ok("DUE is UTC", (icaltime_is_utc(due)));
+
+    for (prop = icalcomponent_get_first_property (subcomp, ICAL_EXDATE_PROPERTY), idx = 0;
+         prop;
+         prop = icalcomponent_get_next_property (subcomp, ICAL_EXDATE_PROPERTY), idx++) {
+        struct icaltimetype exdate = icalproperty_get_exdate (prop);
+
+        ok("EXDATE is not null-time", (!icaltime_is_null_time (exdate)));
+        ok("expected EXDATE not NULL", (exdate_expected[idx].tzid != NULL));
+
+        if (*(exdate_expected[idx].tzid)) {
+            ok("EXDATE zone is not NULL", (exdate.zone != NULL));
+            ok("EXDATE matches timezone", (strcmp(exdate_expected[idx].tzid, icaltimezone_get_tzid((icaltimezone *) exdate.zone)) == 0));
+        } else {
+            ok("EXDATE zone is NULL", (exdate.zone == NULL));
+        }
+
+        ok("EXDATE is excluded", (icalproperty_recurrence_is_excluded(subcomp, &dtstart, &exdate)));
+    }
+
+    icalcomponent_free (comp);
+}
+
+void test_kind_to_string(void)
+{
+    // value testing
+    ok("VALUE_KIND ICAL_ANY_VALUE is NULL",
+       (icalvalue_kind_to_string(ICAL_ANY_VALUE) == NULL));
+    str_is("VALUE_KIND ICAL_POLLCOMPLETION_VALUE",
+           icalvalue_kind_to_string(ICAL_POLLCOMPLETION_VALUE), "POLLCOMPLETION");
+    str_is("VALUE_KIND ICAL_NO_VALUE",
+           icalvalue_kind_to_string(ICAL_NO_VALUE), "");
+
+    ok("VALUE_KIND ICAL_ANY_VALUE is invalid",
+       !icalvalue_kind_is_valid(ICAL_ANY_VALUE));
+    ok("VALUE_KIND ICAL_POLLCOMPLETION_VALUE is valid",
+       icalvalue_kind_is_valid(ICAL_POLLCOMPLETION_VALUE));
+    ok("VALUE_KIND ICAL_NO_VALUE is valid",
+       icalvalue_kind_is_valid(ICAL_NO_VALUE));
+
+    // parameter testing
+    ok("PARAMETER_KIND ICAL_ANY_PARAMETER is NULL",
+       (icalparameter_kind_to_string(ICAL_ANY_PARAMETER) == NULL));
+    str_is("PARAMETER_KIND ICAL_EMAIL_PARAMETER",
+           icalparameter_kind_to_string(ICAL_EMAIL_PARAMETER), "EMAIL");
+    str_is("PARAMETER_KIND ICAL_NO_PARAMETER",
+           icalparameter_kind_to_string(ICAL_NO_PARAMETER), "");
+
+    ok("PARAMETER_KIND ICAL_ANY_PARAMETER is invalid",
+       !icalparameter_kind_is_valid(ICAL_ANY_PARAMETER));
+    ok("PARAMETER_KIND ICAL_EMAIL_PARAMETER is valid",
+       icalparameter_kind_is_valid(ICAL_EMAIL_PARAMETER));
+    ok("PARAMETER_KIND ICAL_NO_PARAMETER is valid",
+       icalparameter_kind_is_valid(ICAL_NO_PARAMETER));
+
+    // property testing
+    ok("PROPERTY_KIND ICAL_ANY_PROPERTY is NULL",
+       (icalproperty_kind_to_string(ICAL_ANY_PROPERTY) == NULL));
+    str_is("PROPERTY_KIND ICAL_VOTER_PROPERTY",
+           icalproperty_kind_to_string(ICAL_VOTER_PROPERTY), "VOTER");
+    str_is("PROPERTY_KIND ICAL_NO_PROPERTY",
+           icalproperty_kind_to_string(ICAL_NO_PROPERTY), "");
+
+    ok("PROPERTY_KIND ICAL_ANY_PROPERTY is invalid",
+       !icalproperty_kind_is_valid(ICAL_ANY_PROPERTY));
+    ok("PROPERTY_KIND ICAL_VOTER_PROPERTY is valid",
+       icalproperty_kind_is_valid(ICAL_VOTER_PROPERTY));
+    ok("PROPERTY_KIND ICAL_NO_PROPERTY is valid",
+       icalproperty_kind_is_valid(ICAL_NO_PROPERTY));
+}
+
+void test_string_to_kind(void)
+{
+    ok("VALUE NULL is ICAL_NO_VALUE",
+       (icalvalue_string_to_kind(NULL) == ICAL_NO_VALUE));
+    int_is("ICAL_POLLCOMPLETION_VALUE is POLLCOMPLETION",
+           icalvalue_string_to_kind("POLLCOMPLETION"), ICAL_POLLCOMPLETION_VALUE);
+    int_is("ICAL_NO_VALUE is empty string",
+           icalvalue_string_to_kind(""), ICAL_NO_VALUE);
+
+    ok("PARAMETER NULL is ICAL_NO_PARAMETER",
+       (icalparameter_string_to_kind(NULL) == ICAL_NO_PARAMETER));
+    int_is("ICAL_EMAIL_PARAMETER is EMAIL",
+           icalparameter_string_to_kind("EMAIL"), ICAL_EMAIL_PARAMETER);
+    int_is("ICAL_NO_PARAMETER is empty string",
+           icalparameter_string_to_kind(""), ICAL_NO_PARAMETER);
+
+    ok("PROPERTY NULL is ICAL_NO_PROPERTY",
+       (icalproperty_string_to_kind(NULL) == ICAL_NO_PROPERTY));
+    int_is("ICAL_VOTER_PROPERTY is VOTER",
+           icalproperty_string_to_kind("VOTER"), ICAL_VOTER_PROPERTY);
+    int_is("ICAL_NO_PROPERTY is empty string",
+           icalproperty_string_to_kind(""), ICAL_NO_PROPERTY);
+}
+
 int main(int argc, char *argv[])
 {
 #if !defined(HAVE_UNISTD_H)
@@ -4411,6 +4592,10 @@ int main(int argc, char *argv[])
     test_run("Test comma in quoted value of x property", test_comma_in_quoted_value, do_test,
              do_header);
     test_run("Test out of memory", test_out_of_memory, do_test, do_header);
+    test_run("Test setting/unsetting zoneinfo dir", test_zoneinfo_stuff, do_test, do_header);
+    test_run("Test TZID with UTC time", test_tzid_with_utc_time, do_test, do_header);
+    test_run("Test kind_to_string", test_kind_to_string, do_test, do_header);
+    test_run("Test string_to_kind", test_string_to_kind, do_test, do_header);
 
 #if ADD_TESTS_REQUIRING_INVESTIGATION
     test_run("Test qsort", test_qsort, do_test, do_header);

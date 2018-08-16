@@ -65,7 +65,9 @@ static pthread_mutex_t changes_mutex = PTHREAD_MUTEX_INITIALIZER;
  */
 #define BUILTIN_TZID_PREFIX_LEN 256
 #define BUILTIN_TZID_PREFIX     "/freeassociation.sourceforge.net/"
-static char ical_tzid_prefix[BUILTIN_TZID_PREFIX_LEN];
+
+/* The prefix to be used for tzid's generated from system tzdata */
+static char s_ical_tzid_prefix[BUILTIN_TZID_PREFIX_LEN] = {0};
 
 /** This is the filename of the file containing the city names and
     coordinates of all the builtin timezones. */
@@ -182,10 +184,10 @@ static void icaltimezone_changes_unlock(void)
 
 const char *icaltimezone_tzid_prefix(void)
 {
-    if (ical_tzid_prefix[0] == '\0') {
-        strncpy(ical_tzid_prefix, BUILTIN_TZID_PREFIX, BUILTIN_TZID_PREFIX_LEN-1);
+    if (s_ical_tzid_prefix[0] == '\0') {
+        strncpy(s_ical_tzid_prefix, BUILTIN_TZID_PREFIX, BUILTIN_TZID_PREFIX_LEN-1);
     }
-    return ical_tzid_prefix;
+    return s_ical_tzid_prefix;
 }
 
 /** Creates a new icaltimezone. */
@@ -1250,6 +1252,7 @@ int icaltimezone_set_component(icaltimezone *zone, icalcomponent *comp)
 const char *icaltimezone_get_display_name(icaltimezone *zone)
 {
     const char *display_name;
+    const char *tzid_prefix;
 
     display_name = icaltimezone_get_location(zone);
     if (!display_name) {
@@ -1257,11 +1260,13 @@ const char *icaltimezone_get_display_name(icaltimezone *zone)
     }
     if (!display_name) {
         display_name = icaltimezone_get_tzid(zone);
+        tzid_prefix = icaltimezone_tzid_prefix();
         /* Outlook will strip out X-LIC-LOCATION property and so all
            we get back in the iTIP replies is the TZID. So we see if
            this is one of our TZIDs and if so we jump to the city name
            at the end of it. */
-        if (display_name && !strncmp(display_name, ical_tzid_prefix, strlen(ical_tzid_prefix))) {
+        if (display_name &&
+            !strncmp(display_name, tzid_prefix, strlen(tzid_prefix))) {
 #if defined(USE_BUILTIN_TZDATA)
             /* XXX  The code below makes assumptions about the prefix
                which don't even jive with our default declared up top */
@@ -1278,7 +1283,7 @@ const char *icaltimezone_get_display_name(icaltimezone *zone)
             }
 #else
             /* Skip past our prefix */
-            display_name += strlen(ical_tzid_prefix);
+            display_name += strlen(tzid_prefix);
 #endif
         }
     }
@@ -1475,7 +1480,7 @@ icaltimezone *icaltimezone_get_builtin_timezone_from_tzid(const char *tzid)
 #if defined(USE_BUILTIN_TZDATA)
     int num_slashes = 0;
 #endif
-    const char *p, *zone_tzid;
+    const char *p, *zone_tzid, *tzid_prefix;
     icaltimezone *zone;
 
     if (!tzid || !tzid[0])
@@ -1485,8 +1490,9 @@ icaltimezone *icaltimezone_get_builtin_timezone_from_tzid(const char *tzid)
         return icaltimezone_get_builtin_timezone(tzid);
     }
 
+    tzid_prefix = icaltimezone_tzid_prefix();
     /* Check that the TZID starts with our unique prefix. */
-    if (strncmp(tzid, ical_tzid_prefix, strlen(ical_tzid_prefix)))
+    if (strncmp(tzid, tzid_prefix, strlen(tzid_prefix)))
         return NULL;
 
 #if defined(USE_BUILTIN_TZDATA)
@@ -1507,7 +1513,7 @@ icaltimezone *icaltimezone_get_builtin_timezone_from_tzid(const char *tzid)
     p++;
 #else
     /* Skip past our prefix */
-    p = tzid + strlen(ical_tzid_prefix);
+    p = tzid + strlen(tzid_prefix);
 #endif
 
     /* Now we can use the function to get the builtin timezone from the
@@ -2132,7 +2138,7 @@ void free_zone_directory(void)
 void icaltimezone_set_tzid_prefix(const char *new_prefix)
 {
     if (new_prefix) {
-        strncpy(ical_tzid_prefix, new_prefix, BUILTIN_TZID_PREFIX_LEN-1);
+        strncpy(s_ical_tzid_prefix, new_prefix, BUILTIN_TZID_PREFIX_LEN-1);
     }
 }
 
