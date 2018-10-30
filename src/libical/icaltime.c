@@ -541,9 +541,6 @@ int icaltime_day_of_week(const struct icaltimetype t)
     jt.year = t.year;
     jt.month = t.month;
     jt.day = t.day;
-    jt.i_hour = 0;
-    jt.i_minute = 0;
-    jt.i_second = 0;
 
     (void)juldat(&jt);
 
@@ -562,9 +559,6 @@ int icaltime_start_doy_week(const struct icaltimetype t, int fdow)
     jt.year = t.year;
     jt.month = t.month;
     jt.day = t.day;
-    jt.i_hour = 0;
-    jt.i_minute = 0;
-    jt.i_second = 0;
 
     (void)juldat(&jt);
     (void)caldat(&jt);
@@ -589,9 +583,6 @@ int icaltime_week_number(const struct icaltimetype ictt)
     jt.year = ictt.year;
     jt.month = ictt.month;
     jt.day = ictt.day;
-    jt.i_hour = 0;
-    jt.i_minute = 0;
-    jt.i_second = 0;
 
     (void)juldat(&jt);
     (void)caldat(&jt);
