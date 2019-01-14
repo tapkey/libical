@@ -1375,11 +1375,12 @@ static int validate_byrule(icalrecur_iterator *impl,
     if (has_by_data(impl, byrule)) {
         UErrorCode status = U_ZERO_ERROR;
         short *by_ptr = *impl->by_ptrs[byrule];
+        short by_ptr_size = *impl->by_ptr_sizes[byrule];
         short max =
             (short)ucal_getLimit(impl->rscale, field, UCAL_MAXIMUM, &status);
         short idx;
 
-        for (idx = 0; by_ptr[idx] != ICAL_RECURRENCE_ARRAY_MAX; idx++) {
+        for (idx = 0; idx < by_ptr_size; idx++) {
             short val = decode_val ?
                 decode_val(&by_ptr[idx], decode_flags) : by_ptr[idx];
 
