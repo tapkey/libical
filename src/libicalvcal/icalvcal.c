@@ -1204,8 +1204,6 @@ static void *rule_prop(int icaltype, VObject *object, icalcomponent *comp,
     struct icalrecurrencetype recur_instance;
     struct icalrecurrencetype *recur = &recur_instance;
 
-    recur->storage = (struct icalrecurrencetype_storage *) icalmemory_new_buffer(sizeof(*recur->storage));
-
     _unused(icaltype);
     _unused(comp);
     _unused(defaults);
@@ -1215,6 +1213,7 @@ static void *rule_prop(int icaltype, VObject *object, icalcomponent *comp,
     property_name = vObjectName(object);
 
     icalrecurrencetype_clear(recur);
+    recur->storage = (struct icalrecurrencetype_storage *) icalmemory_new_buffer(sizeof(*recur->storage));
 
     error_message = NULL;
     parsestat = NULL;
