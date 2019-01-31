@@ -262,7 +262,10 @@ icalcomponent *icaltzutil_fetch_timezone(const char *location)
     icalproperty *icalprop;
     icaltimetype icaltime;
     struct icalrecurrencetype standard_recur;
+    struct icalrecurrencetype_storage standard_storage;
     struct icalrecurrencetype daylight_recur;
+    struct icalrecurrencetype_storage daylight_storage;
+
     icaltimetype prev_standard_time = icaltime_null_time();
     icaltimetype prev_daylight_time = icaltime_null_time();
     icaltimetype prev_prev_standard_time;
@@ -296,7 +299,7 @@ icalcomponent *icaltzutil_fetch_timezone(const char *location)
         goto error;
     }
 
-    if (fseek(f, 20, SEEK_SET) != 0) {
+	if (fseek(f, 20, SEEK_SET) != 0) {
         icalerror_set_errno(ICAL_FILE_ERROR);
         goto error;
     }
@@ -430,6 +433,13 @@ icalcomponent *icaltzutil_fetch_timezone(const char *location)
         idx = trans_idx[0];
     }
 
+    daylight_recur.storage = &daylight_storage;
+    daylight_recur.by_day = &daylight_storage.by_day[0];
+    daylight_recur.by_month = &daylight_storage.by_month[0];
+    standard_recur.storage = &standard_storage;
+    standard_recur.by_day = &standard_storage.by_day[0];
+    standard_recur.by_month = &standard_storage.by_month[0];
+
     for (i = 1; i < num_trans; i++) {
         int by_day;
         int is_new_comp = 0;
@@ -538,11 +548,18 @@ icalcomponent *icaltzutil_fetch_timezone(const char *location)
             icalprop = icalproperty_new_tzoffsetto(types[idx].gmtoff);
             icalcomponent_add_property(comp, icalprop);
 
+            struct icalrecurrencetype_storage* tmp_storage = recur->storage;
+
             // Determine the recurrence rule for the current set of changes
             icalrecurrencetype_clear(recur);
             recur->freq = ICAL_YEARLY_RECURRENCE;
+            recur->storage = tmp_storage;
+            recur->by_month = &recur->storage->by_month[0];
             recur->by_month[0] = icaltime.month;
+            recur->by_month_size = 1;
+            recur->by_day = &recur->storage->by_day[0];
             recur->by_day[0] = by_day;
+            recur->by_day_size = 1;
             icalprop = icalproperty_new_rrule(*recur);
             icalcomponent_add_property(comp, icalprop);
 

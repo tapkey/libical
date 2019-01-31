@@ -727,6 +727,7 @@ struct icalrecurrencetype* icalrecurrencetype_from_string(const char *str)
             icalerror_set_errno(ICAL_MALFORMEDDATA_ERROR);
             icalmemory_free_buffer(parser.rt.rscale);
             icalrecurrencetype_clear(&parser.rt);
+            icalmemory_free_buffer(pStorage);
             break;
         }
     }
