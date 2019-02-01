@@ -2667,192 +2667,87 @@ void test_recur_parser()
 	icalrecurrencetype_free(rt);
 }
 
-typedef struct original_ut_instant
-{
-    double j_date;      /**< julian decimal date, 0 = 01 Jan 4713 BC 12 HR UT */
-    long year;          /**< year, valid range [-4,713, +2,147,483,647] */
-    int month;          /**<    [1-12]  */
-    int day;            /**<    [1-31]  */
-    int i_hour;         /**<    [0-23]  */
-    int i_minute;               /**<    [0-59]  */
-    int i_second;               /**<    [0-59]  */
-    double d_hour;              /**< [0.0-23.9999] includes minute and second */
-    double d_minute;            /**<    [0.0-59.9999] includes second   */
-    double d_second;            /**<    [0.0-59.9999]   */
-    int weekday;                /**<    [0-6]   */
-    int day_of_year;            /**<    [1-366] */
-} original_UTinstant, *original_UTinstantPtr;
-
-
-/* This is the original implementation of caldat, before reimplementing it with
-avoidance of double and time components. We use it to compare the outcome to the
-new implementation. */
-static long original_caldat(date)
-struct original_ut_instant * date;
-{
-    double frac;
-    long jd;
-    long ka;
-    long kb;
-    long kc;
-    long kd;
-    long ke;
-    long ialp;
-
-    jd = (long)(date->j_date + 0.5);	/* integer julian date */
-    frac = date->j_date + 0.5 - (double)jd + 1.0e-10; /* day fraction */
-    ka = (long)jd;
-    if (jd >= 2299161L)
-    {
-        ialp = (long)(((double)jd - 1867216.25) / 36524.25);
-        ka = jd + 1L + ialp - (ialp >> 2);
-    }
-    kb = ka + 1524L;
-    kc = (long)(((double)kb - 122.1) / 365.25);
-    kd = (long)((double)kc * 365.25);
-    ke = (long)((double)(kb - kd) / 30.6001);
-    date->day = kb - kd - ((long)((double)ke * 30.6001));
-    if (ke > 13L)
-        date->month = ke - 13L;
-    else
-        date->month = ke - 1L;
-    if ((date->month == 2) && (date->day > 28))
-        date->day = 29;
-    if ((date->month == 2) && (date->day == 29) && (ke == 3L))
-        date->year = kc - 4716L;
-    else if (date->month > 2)
-        date->year = kc - 4716L;
-    else
-        date->year = kc - 4715L;
-    date->d_hour = frac * 24.0; /* hour */
-    date->i_hour = (int)date->d_hour;
-    date->d_minute = (date->d_hour - (double)date->i_hour) * 60.0; /* minute */
-    date->i_minute = (int)date->d_minute;
-    date->d_second = (date->d_minute - (double)date->i_minute) * 60.0;/* second */
-    date->i_second = (int)date->d_second;
-    date->weekday = (jd + 1L) % 7L;	/* day of week */
-    if (date->year == ((date->year >> 2) << 2))
-        date->day_of_year =
-        ((275 * date->month) / 9)
-        - ((date->month + 9) / 12)
-        + date->day - 30;
-    else
-        date->day_of_year =
-        ((275 * date->month) / 9)
-        - (((date->month + 9) / 12) << 1)
-        + date->day - 30;
-    return(date->year);
-}
-
-/* This is the original implementation of juldat, before reimplementing it with
-avoidance of double and time components. We use it to compare the outcome to the
-new implementation. */
-static double original_juldat(date)
-struct original_ut_instant * date;
-{
-    double frac, gyr;
-    long iy0, im0;
-    long ia, ib;
-    long jd;
-
-    /* decimal day fraction	*/
-    frac = ((double)date->i_hour / 24.0)
-        + ((double)date->i_minute / 1440.0)
-        + (date->d_second / 86400.0);
-    /* convert date to format YYYY.MMDDdd	*/
-    gyr = (double)date->year
-        + (0.01 * (double)date->month)
-        + (0.0001 * (double)date->day)
-        + (0.0001 * frac) + 1.0e-9;
-    /* conversion factors */
-    if (date->month <= 2)
-    {
-        iy0 = date->year - 1L;
-        im0 = date->month + 12;
-    }
-    else
-    {
-        iy0 = date->year;
-        im0 = date->month;
-    }
-    ia = iy0 / 100L;
-    ib = 2L - ia + (ia >> 2);
-    /* calculate julian date	*/
-    if (date->year < 0L)
-        jd = (long)((365.25 * (double)iy0) - 0.75)
-        + (long)(30.6001 * (im0 + 1L))
-        + (long)date->day + 1720994L;
-    else
-        jd = (long)(365.25 * (double)iy0)
-        + (long)(30.6001 * (double)(im0 + 1L))
-        + (long)date->day + 1720994L;
-    if (gyr >= 1582.1015)	/* on or after 15 October 1582	*/
-        jd += ib;
-    date->j_date = (double)jd + frac + 0.5;
-    jd = (long)(date->j_date + 0.5);
-    date->weekday = (jd + 1L) % 7L;
-    return(date->j_date);
-}	/*	end of	double juldat( date )	*/
 
 static int test_juldat_caldat_instance(long year, int month, int day) {
 
-    UTinstant instant;
-    original_UTinstant originalInstant;
+    struct icaltimetype t;
+    struct ut_instant originalInstant;
 
-    memset(&instant, 0, sizeof(instant));
-    instant.year = year;
-    instant.month = month;
-    instant.day = day;
+    
+    memset(&t, 0, sizeof(t));
+    t.year = year;
+    t.month = month;
+    t.day = day;
 
     memset(&originalInstant, 0, sizeof(originalInstant));
     originalInstant.year = year;
     originalInstant.month = month;
     originalInstant.day = day;
 
-    juldat(&instant);
-    original_juldat(&originalInstant);
+    juldat(&originalInstant);
+    caldat(&originalInstant);
 
-    if (
-        (instant.day_of_year != originalInstant.day_of_year)
-        || (instant.weekday != originalInstant.weekday)
-        ) {
+    if (icaltime_day_of_week(t) != originalInstant.weekday + 1)
         return -1;
-    }
 
-    caldat(&instant);
-    original_caldat(&originalInstant);
-
-    if (
-        (instant.day_of_year != originalInstant.day_of_year)
-        || (instant.weekday != originalInstant.weekday)
-        ) {
+    if (icaltime_start_doy_week(t, 1) != originalInstant.day_of_year - originalInstant.weekday)
         return -1;
-    }
+
+    if (icaltime_week_number(t) != (originalInstant.day_of_year - originalInstant.weekday) / 7)
+        return -1;
 
     return 0;
 }
 
+/*
+ * This test verifies the caldat_int and juldat_int functions. The functions are reworked versions 
+ * of the original caldat and juldat functions but avoid using floating point arithmetics. As the
+ * new functions are not exported, the test cannot access them directly. It therefore checks the
+ * output of the icaltime_day_of_week, icaltime_start_doy_week and icaltime_week_number functions
+ * which are based on the functions to be tested.
+ */
 void test_juldat_caldat() {
 
     int i;
     int failed = 0;
 
-    ok("juldat and caldat return the expected values for specified min values", test_juldat_caldat_instance(-4713, 1, 1) == 0);
-    ok("juldat and caldat return the expected values for specified max values", test_juldat_caldat_instance(+32767, 1, 1) == 0);
+    ok("juldat and caldat return the expected values for specified min input values", test_juldat_caldat_instance(-4713, 1, 1) == 0);
+    ok("juldat and caldat return the expected values for specified max input values", test_juldat_caldat_instance(+32767, 12, 31) == 0);
 
+    ok("juldat and caldat return the expected values before end of julian calendar", test_juldat_caldat_instance(1582, 10, 4) == 0);
+    ok("juldat and caldat return the expected values at end of julian calendar", test_juldat_caldat_instance(1582, 10, 5) == 0);
     ok("juldat and caldat return the expected values before introduction of gregorian calendar", test_juldat_caldat_instance(1582, 10, 14) == 0);
     ok("juldat and caldat return the expected values at introduction of gregorian calendar", test_juldat_caldat_instance(1582, 10, 15) == 0);
     ok("juldat and caldat return the expected values after introduction of gregorian calendar", test_juldat_caldat_instance(1582, 10, 16) == 0);
 
+    for (i = 0; i < 2582; i++) {
+
+        long y = i;
+
+        failed |= (test_juldat_caldat_instance(y, 1, 1) != 0);
+        failed |= (test_juldat_caldat_instance(y, 2, 28) != 0);
+
+        // Not every year has a leap day, but juldat_int/caldat_int should still produce
+        // the same output as the original implementation.
+        failed |= (test_juldat_caldat_instance(y, 2, 29) != 0);
+        failed |= (test_juldat_caldat_instance(y, 3, 1) != 0);
+        failed |= (test_juldat_caldat_instance(y, 12, 31) != 0);
+    }
+    ok("juldat and caldat return the expected values for random input values", failed == 0);
+
+    failed = 0;
     for (i = 0; i < 10000; i++) {
         long y = rand() % 2582;
         int m = rand() % 12 + 1;
+
+        // Might produce some invalid dates, but juldat_int/caldat_int should still produce
+        // the same output as the original implementation.
         int d = rand() % 31 + 1;
 
         failed |= (test_juldat_caldat_instance(y, m, d) != 0);
     }
 
-    ok("juldat and caldat return the expected values for random values", failed == 0);
+    ok("juldat and caldat return the expected values for random input values", failed == 0);
 }
 
 

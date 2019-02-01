@@ -71,18 +71,49 @@
 
 typedef struct ut_instant
 {
-    long j_date0;      /**< julian decimal date, 0 = 01 Jan 4713 BC */
-    long year;          /**< year, valid range [-4,713, +32,767] */
+    double j_date;      /**< julian decimal date, 0 = 01 Jan 4713 BC 12 HR UT */
+    long year;          /**< year, valid range [-4,713, +2,147,483,647] */
     int month;          /**<    [1-12]  */
     int day;            /**<    [1-31]  */
+    int i_hour;         /**<    [0-23]  */
+    int i_minute;               /**<    [0-59]  */
+    int i_second;               /**<    [0-59]  */
+    double d_hour;              /**< [0.0-23.9999] includes minute and second */
+    double d_minute;            /**<    [0.0-59.9999] includes second   */
+    double d_second;            /**<    [0.0-59.9999]   */
     int weekday;                /**<    [0-6]   */
     int day_of_year;            /**<    [1-366] */
 } UTinstant, *UTinstantPtr;
 
 /*      Functions in caldate.c  */
 
-LIBICAL_ICAL_EXPORT void caldat(UTinstantPtr);    /** converts julian date to year,mo,da */
+/** converts julian date to year,mo,da
+ *  @deprecated use caldat_int() instead
+ */
+LIBICAL_ICAL_EXPORT long caldat(UTinstantPtr);
 
-LIBICAL_ICAL_EXPORT void juldat(UTinstantPtr);    /** returns julian day from year,mo,da */
+/** returns julian day from year,mo,da
+ *  @deprecated use juldat_int() instead
+ */
+LIBICAL_ICAL_EXPORT double juldat(UTinstantPtr);
+
+
+typedef struct ut_instant_int
+{
+    long j_date0;      /**< julian decimal date, 0 = 01 Jan 4713 BC */
+    long year;          /**< year, valid range [-4,713, +32,767] */
+    int month;          /**<    [1-12]  */
+    int day;            /**<    [1-31]  */
+    int weekday;                /**<    [0-6]   */
+    int day_of_year;            /**<    [1-366] */
+} UTinstantInt, *UTinstantIntPtr;
+
+/*      Functions in caldate.c  */
+
+/** converts julian date to year,mo,da */
+void caldat_int(UTinstantIntPtr);
+
+/** returns julian day from year,mo,da */
+void juldat_int(UTinstantIntPtr);
 
 #endif

@@ -534,15 +534,15 @@ int icaltime_days_in_month(const int month, const int year)
 /* 1-> Sunday, 7->Saturday */
 int icaltime_day_of_week(const struct icaltimetype t)
 {
-    UTinstant jt;
+    UTinstantInt jt;
 
-    memset(&jt, 0, sizeof(UTinstant));
+    memset(&jt, 0, sizeof(UTinstantInt));
 
     jt.year = t.year;
     jt.month = t.month;
     jt.day = t.day;
 
-    (void)juldat(&jt);
+    (void)juldat_int(&jt);
 
     return jt.weekday + 1;
 }
@@ -551,17 +551,17 @@ int icaltime_day_of_week(const struct icaltimetype t)
  */
 int icaltime_start_doy_week(const struct icaltimetype t, int fdow)
 {
-    UTinstant jt;
+    UTinstantInt jt;
     int delta;
 
-    memset(&jt, 0, sizeof(UTinstant));
+    memset(&jt, 0, sizeof(UTinstantInt));
 
     jt.year = t.year;
     jt.month = t.month;
     jt.day = t.day;
 
-    (void)juldat(&jt);
-    (void)caldat(&jt);
+    (void)juldat_int(&jt);
+    (void)caldat_int(&jt);
 
     delta = jt.weekday - (fdow - 1);
     if (delta < 0) {
@@ -576,16 +576,16 @@ int icaltime_start_doy_week(const struct icaltimetype t, int fdow)
  */
 int icaltime_week_number(const struct icaltimetype ictt)
 {
-    UTinstant jt;
+    UTinstantInt jt;
 
-    memset(&jt, 0, sizeof(UTinstant));
+    memset(&jt, 0, sizeof(UTinstantInt));
 
     jt.year = ictt.year;
     jt.month = ictt.month;
     jt.day = ictt.day;
 
-    (void)juldat(&jt);
-    (void)caldat(&jt);
+    (void)juldat_int(&jt);
+    (void)caldat_int(&jt);
 
     return (jt.day_of_year - jt.weekday) / 7;
 }
