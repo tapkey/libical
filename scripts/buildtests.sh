@@ -10,8 +10,13 @@ set -o pipefail
 #ensure parallel builds
 export MAKEFLAGS=-j8
 
-#needed to find homebrew's libffi on osx
-export PKG_CONFIG_PATH=/usr/local/opt/libffi/lib/pkgconfig
+if (test "`uname -s`" = "Darwin")
+then
+  #needed to find homebrew's libxml2 and libffi on osx
+  export PKG_CONFIG_PATH=/usr/local/opt/libffi/lib/pkgconfig:/usr/local/opt/libxml2/lib/pkgconfig
+  #needed to find the homebrew installed xml2 catalog
+  export XML_CATALOG_FILES=/usr/local/etc/xml/catalog
+fi
 
 ##### START FUNCTIONS #####
 
@@ -89,7 +94,7 @@ CHECK_WARNINGS() {
 # print warnings found in the compile-stage output
 # $1 = file with the compile-stage output
 COMPILE_WARNINGS() {
-  whitelist='\(dynamic[[:space:]]exception[[:space:]]specifications[[:space:]]are[[:space:]]deprecated\|Value[[:space:]]descriptions\|unused[[:space:]]declarations\|g-ir-scanner:\|clang.*argument[[:space:]]unused[[:space:]]during[[:space:]]compilation\|U_PLATFORM_HAS_WINUWP_API\|DB_DBM_HSEARCH\|const[[:space:]]DBT\|db\.h\)'
+  whitelist='\(no[[:space:]]link[[:space:]]for:\|Value[[:space:]]descriptions\|unused[[:space:]]declarations\|g-ir-scanner:\|clang.*argument[[:space:]]unused[[:space:]]during[[:space:]]compilation\|U_PLATFORM_HAS_WINUWP_API\|DB_DBM_HSEARCH\|const[[:space:]]DBT\|db\.h\)'
   CHECK_WARNINGS $1 "warning:" "$whitelist"
 }
 
@@ -112,7 +117,7 @@ TIDY_WARNINGS() {
 # print warnings found in the scan-build output
 # $1 = file with the scan-build output
 SCAN_WARNINGS() {
-  whitelist='\(dynamic[[:space:]]exception\|Value[[:space:]]descriptions\|unused[[:space]]declarations\)'
+  whitelist='\(no[[:space:]]link[[:space:]]for:\|Value[[:space:]]descriptions\|unused[[:space:]]declarations\|icalerror.*Dereference[[:space:]]of[[:space:]]null[[:space:]]pointer\)'
   CHECK_WARNINGS $1 "warning:" "$whitelist"
 }
 
@@ -248,8 +253,9 @@ CPPCHECK() {
            -D gmtime_r="" \
            -D size_t="unsigned long" \
            -D bswap32="" \
-           -D PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP="" \
+           -D PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP=0 \
            -D _unused="(void)" \
+           -D _deprecated="(void)" \
            -D F_OK=0 \
            -D R_OK=0 \
            -U YYSTYPE \
@@ -473,6 +479,7 @@ BDIR=""
 CMAKEOPTS="-DCMAKE_BUILD_TYPE=Debug -DGOBJECT_INTROSPECTION=False -DICAL_GLIB=False -DICAL_BUILD_DOCS=False"
 UUCCMAKEOPTS="$CMAKEOPTS -DCMAKE_DISABLE_FIND_PACKAGE_ICU=True"
 TZCMAKEOPTS="$CMAKEOPTS -DUSE_BUILTIN_TZDATA=True"
+LTOCMAKEOPTS="$CMAKEOPTS -DENABLE_LTO_BUILD=True"
 
 #Static code checkers
 KRAZY
@@ -489,6 +496,7 @@ CLANGTIDY test2builtin "$TZCMAKEOPTS"
 GCC_BUILD test1 ""
 GCC_BUILD test2 "$CMAKEOPTS"
 GCC_BUILD test3 "$UUCCMAKEOPTS"
+GCC_BUILD test4 "$LTOCMAKEOPTS"
 if (test "`uname -s`" = "Linux")
 then
     echo "Temporarily disable cross-compile tests"
@@ -502,6 +510,7 @@ GCC_BUILD test2builtin "$TZCMAKEOPTS"
 CLANG_BUILD test1 ""
 CLANG_BUILD test2 "$CMAKEOPTS"
 CLANG_BUILD test3 "$UUCCMAKEOPTS"
+#CLANG_BUILD test4 "$LTOCMAKEOPTS"
 if (test "`uname -s`" = "Linux")
 then
     echo "Temporarily disable cross-compile tests"

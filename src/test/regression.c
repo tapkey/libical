@@ -20,6 +20,8 @@
  The original code is regression.c
 ======================================================================*/
 //krazy:skip
+
+# define NO_DEPRECATION_WARNINGS // do not complain about our own deprecated usage
 #ifdef HAVE_CONFIG_H
 #include <config.h>
 #endif
@@ -706,6 +708,21 @@ void test_recur_iterator_set_start()
 
     ok("Next recurrence iterator result should be of type date", next.is_date == 1);
     icalrecur_iterator_free(iterator);
+}
+
+void test_recur_iterator_on_jan_1()
+{
+    icaltimetype start = icaltime_from_string("20190101");
+    struct icalrecurrencetype* recurrence = icalrecurrencetype_from_string("FREQ=WEEKLY;WKST=SU;INTERVAL=2;BYDAY=MO,TU,WE,TH,FR");
+    icalrecur_iterator *iterator = icalrecur_iterator_new(*recurrence, start);
+
+    icaltimetype next = icalrecur_iterator_next(iterator);
+    ok("Next recurrence iterator result should be January 1", next.year == 2019 && next.month == 1 && next.day == 1);
+
+    next = icalrecur_iterator_next(iterator);
+    ok("Next recurrence iterator result should be January 2", next.year == 2019 && next.month == 1 && next.day == 2);
+    icalrecur_iterator_free(iterator);
+    icalrecurrencetype_free(recurrence);
 }
 
 void test_memory()
@@ -2673,7 +2690,7 @@ static int test_juldat_caldat_instance(long year, int month, int day) {
     struct icaltimetype t;
     struct ut_instant originalInstant;
 
-    
+
     memset(&t, 0, sizeof(t));
     t.year = year;
     t.month = month;
@@ -2700,7 +2717,7 @@ static int test_juldat_caldat_instance(long year, int month, int day) {
 }
 
 /*
- * This test verifies the caldat_int and juldat_int functions. The functions are reworked versions 
+ * This test verifies the caldat_int and juldat_int functions. The functions are reworked versions
  * of the original caldat and juldat functions but avoid using floating point arithmetics. As the
  * new functions are not exported, the test cannot access them directly. It therefore checks the
  * output of the icaltime_day_of_week, icaltime_start_doy_week and icaltime_week_number functions
@@ -4546,6 +4563,54 @@ void test_string_to_kind(void)
            icalproperty_string_to_kind(""), ICAL_NO_PROPERTY);
 }
 
+void test_set_date_datetime_value(void)
+{
+    icalproperty *prop;
+    icalparameter *param;
+    struct icaltimetype itt;
+    const char *propstr;
+
+    itt = icaltime_current_time_with_zone(icaltimezone_get_utc_timezone());
+
+    prop = icalproperty_new_dtstart(itt);
+    propstr = icalproperty_as_ical_string(prop);
+    icalproperty_free(prop);
+    prop = icalproperty_new_from_string(propstr);
+    ok("DATE-TIME on DTSTART is saved without VALUE",
+       (icalproperty_get_first_parameter(prop, ICAL_VALUE_PARAMETER) == NULL));
+
+    itt.is_date = 1;
+    icalproperty_set_dtstart(prop, itt);
+    propstr = icalproperty_as_ical_string(prop);
+    icalproperty_free(prop);
+    prop = icalproperty_new_from_string(propstr);
+    param = icalproperty_get_first_parameter(prop, ICAL_VALUE_PARAMETER);
+    ok("DATE on DTSTART is saved with VALUE", (param != NULL));
+    ok("DATE on DTSTART is saved with DATE VALUE", (icalparameter_get_value(param) == ICAL_VALUE_DATE));
+
+    itt.is_date = 0;
+    icalproperty_set_dtstart(prop, itt);
+    ok("VALUE parameter on DTSTART is removed right after set",
+       (icalproperty_get_first_parameter(prop, ICAL_VALUE_PARAMETER) == NULL));
+    propstr = icalproperty_as_ical_string(prop);
+    icalproperty_free(prop);
+    prop = icalproperty_new_from_string(propstr);
+    ok("DATE-TIME on DTSTART is saved without VALUE",
+       (icalproperty_get_first_parameter(prop, ICAL_VALUE_PARAMETER) == NULL));
+
+    /* Try it twice */
+    itt.is_date = 1;
+    icalproperty_set_dtstart(prop, itt);
+    propstr = icalproperty_as_ical_string(prop);
+    icalproperty_free(prop);
+    prop = icalproperty_new_from_string(propstr);
+    param = icalproperty_get_first_parameter(prop, ICAL_VALUE_PARAMETER);
+    ok("DATE on DTSTART is saved with VALUE", (param != NULL));
+    ok("DATE on DTSTART is saved with DATE VALUE", (icalparameter_get_value(param) == ICAL_VALUE_DATE));
+
+    icalproperty_free(prop);
+}
+
 int main(int argc, char *argv[])
 {
 #if !defined(HAVE_UNISTD_H)
@@ -4647,6 +4712,7 @@ int main(int argc, char *argv[])
     test_run("Test Components", test_components, do_test, do_header);
     test_run("Test icalcomponent_foreach_recurrence", test_component_foreach, do_test, do_header);
     test_run("Test icalrecur_iterator_set_start with date", test_recur_iterator_set_start, do_test, do_header);
+    test_run("Test weekly icalrecur_iterator on January 1", test_recur_iterator_on_jan_1, do_test, do_header);
     test_run("Test Convenience", test_convenience, do_test, do_header);
     test_run("Test classify ", test_classify, do_test, do_header);
     test_run("Test Iterators", test_iterators, do_test, do_header);
@@ -4682,6 +4748,7 @@ int main(int argc, char *argv[])
     test_run("Test TZID with UTC time", test_tzid_with_utc_time, do_test, do_header);
     test_run("Test kind_to_string", test_kind_to_string, do_test, do_header);
     test_run("Test string_to_kind", test_string_to_kind, do_test, do_header);
+    test_run("Test set DATE/DATE-TIME VALUE", test_set_date_datetime_value, do_test, do_header);
 
 #if ADD_TESTS_REQUIRING_INVESTIGATION
     test_run("Test qsort", test_qsort, do_test, do_header);
